@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, AlertCircle } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +17,17 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Clear all fields every time the modal opens to prevent password caching
+  useEffect(() => {
+    if (isOpen) {
+      setEmail('');
+      setPassword('');
+      setError(null);
+      setSuccessMessage(null);
+      setIsSignUp(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,7 +37,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setLoading(true);
 
     if (!isSupabaseConfigured) {
-      setError("Supabase is not configured. Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment variables.");
+      setError(t('auth.offline'));
       setLoading(false);
       return;
     }
@@ -38,7 +49,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           password,
         });
         if (error) throw error;
-        setSuccessMessage("Registration successful! Please check your email to verify your account.");
+        setSuccessMessage(t('auth.success'));
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -70,17 +81,17 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               L
             </div>
             <h2 className="text-2xl font-display font-bold text-on-surface">
-              {isSignUp ? "Create an Account" : "Welcome Back"}
+              {isSignUp ? t('auth.signup.title') : t('auth.signin.title')}
             </h2>
             <p className="text-on-surface-variant mt-2 text-sm">
-              {isSignUp ? "Sign up to save your favourite music sheets." : "Sign in to access your saved music sheets."}
+              {isSignUp ? t('auth.signup.subtitle') : t('auth.signin.subtitle')}
             </p>
           </div>
 
           {!isSupabaseConfigured && (
             <div className="mb-6 p-4 bg-error/10 text-error rounded-xl flex items-start text-sm">
               <AlertCircle className="w-5 h-5 mr-2 shrink-0 mt-0.5" />
-              <p>Supabase is not configured. The app is running in offline mode. Please provide your Supabase keys to enable authentication.</p>
+              <p>{t('auth.offline')}</p>
             </div>
           )}
 
@@ -98,7 +109,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-on-surface mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-on-surface mb-1.5">{t('auth.email')}</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="h-5 w-5 text-on-surface-variant" />
@@ -109,13 +120,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border-b-2 border-outline-variant/30 bg-surface-container-highest focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-colors rounded-t-xl rounded-b-sm text-on-surface"
-                  placeholder="you@example.com"
+                  placeholder={t('auth.emailPlaceholder')}
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-on-surface mb-1.5">Password</label>
+              <label className="block text-sm font-medium text-on-surface mb-1.5">{t('auth.password')}</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="h-5 w-5 text-on-surface-variant" />
@@ -123,6 +134,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 <input
                   type="password"
                   required
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border-b-2 border-outline-variant/30 bg-surface-container-highest focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-colors rounded-t-xl rounded-b-sm text-on-surface"
@@ -137,7 +149,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               disabled={loading || !isSupabaseConfigured}
               className="w-full py-3 px-4 border border-transparent rounded-full shadow-ambient text-sm font-bold text-on-primary bg-primary hover:bg-primary-container focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-6"
             >
-              {loading ? "Please wait..." : (isSignUp ? "Sign Up" : "Sign In")}
+              {loading ? t('auth.loading') : (isSignUp ? t('auth.button.signup') : t('auth.button.signin'))}
             </button>
           </form>
 
@@ -147,7 +159,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               onClick={() => setIsSignUp(!isSignUp)}
               className="text-sm text-primary hover:text-primary-container font-medium transition-colors"
             >
-              {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
+              {isSignUp ? t('auth.switch.tosignin') : t('auth.switch.tosignup')}
             </button>
           </div>
         </div>

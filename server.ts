@@ -16,9 +16,25 @@ async function startServer() {
 
   // Cron job to keep database awake every 7 days
   // "0 0 * * 0" runs every Sunday at midnight
-  cron.schedule("0 0 * * 0", () => {
+  cron.schedule("0 0 * * 0", async () => {
     console.log("Running cron job to keep database awake...");
-    // In the future, this will ping Supabase
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+      const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+      if (supabaseUrl) {
+        const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`
+          }
+        });
+        console.log(`Supabase ping status: ${response.status}`);
+      } else {
+        console.log("Supabase URL not configured, skipping ping.");
+      }
+    } catch (e) {
+      console.error("Failed to ping Supabase:", e);
+    }
   });
 
   // Vite middleware for development

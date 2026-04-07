@@ -9,7 +9,7 @@ export function SongDetail() {
   const { t } = useTranslation();
   const { songs, currentUser, toggleFavourite } = useStore();
   const [copied, setCopied] = useState(false);
-  const [selectedKey, setSelectedKey] = useState<string>('');
+  const [selectedKeyId, setSelectedKeyId] = useState<string>('');
   const [isKeyDropdownOpen, setIsKeyDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +77,7 @@ export function SongDetail() {
                     onClick={() => setIsKeyDropdownOpen(!isKeyDropdownOpen)}
                     className="w-full flex items-center justify-between pl-4 pr-3 py-3 text-base bg-surface-container-highest hover:bg-surface-container-high border-b-2 border-transparent focus:border-primary focus:outline-none sm:text-sm rounded-t-xl rounded-b-sm text-on-surface transition-colors"
                   >
-                    <span>{selectedKey ? selectedKey : t('song.originalKey')}</span>
+                    <span>{selectedKeyId ? song.keys.find(k => k.id === selectedKeyId)?.name : t('song.originalKey')}</span>
                     <ChevronDown className={`w-4 h-4 text-on-surface-variant transition-transform ${isKeyDropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
 
@@ -85,19 +85,19 @@ export function SongDetail() {
                     <div className="absolute z-20 mt-1 w-full bg-surface-container-lowest rounded-xl shadow-ambient border border-outline-variant/15 overflow-hidden py-1">
                       <button
                         type="button"
-                        className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${selectedKey === '' ? 'bg-primary/10 text-primary font-bold' : 'text-on-surface hover:bg-surface-container'}`}
-                        onClick={() => { setSelectedKey(''); setIsKeyDropdownOpen(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${selectedKeyId === '' ? 'bg-primary/10 text-primary font-bold' : 'text-on-surface hover:bg-surface-container'}`}
+                        onClick={() => { setSelectedKeyId(''); setIsKeyDropdownOpen(false); }}
                       >
                         {t('song.originalKey')}
                       </button>
                       {song.keys.map(k => (
                         <button
-                          key={k}
+                          key={k.id}
                           type="button"
-                          className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${selectedKey === k ? 'bg-primary/10 text-primary font-bold' : 'text-on-surface hover:bg-surface-container'}`}
-                          onClick={() => { setSelectedKey(k); setIsKeyDropdownOpen(false); }}
+                          className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${selectedKeyId === k.id ? 'bg-primary/10 text-primary font-bold' : 'text-on-surface hover:bg-surface-container'}`}
+                          onClick={() => { setSelectedKeyId(k.id); setIsKeyDropdownOpen(false); }}
                         >
-                          {k}
+                          {k.name}
                         </button>
                       ))}
                     </div>
@@ -108,7 +108,7 @@ export function SongDetail() {
 
             <div className="pt-6 flex gap-4">
               <a 
-                href={song.pdfUrl} 
+                href={selectedKeyId ? (song.keys.find(k => k.id === selectedKeyId)?.pdfUrl || song.pdfUrl) : song.pdfUrl} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="inline-flex items-center px-6 py-3 border border-transparent text-base font-bold rounded-full shadow-ambient text-on-primary bg-primary hover:bg-primary-container transition-colors"

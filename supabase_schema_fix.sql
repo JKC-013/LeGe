@@ -38,7 +38,7 @@ CREATE POLICY "Anyone can view approved songs" ON public.songs FOR SELECT USING 
 CREATE POLICY "Publishers can view their own pending songs" ON public.songs FOR SELECT USING (auth.uid() = created_by);
 CREATE POLICY "Admins can view all songs" ON public.songs FOR SELECT USING (public.get_user_role() = 'admin');
 CREATE POLICY "Publishers and admins can insert songs" ON public.songs FOR INSERT WITH CHECK (public.get_user_role() IN ('publisher', 'admin'));
-CREATE POLICY "Admins can update songs" ON public.songs FOR UPDATE USING (public.get_user_role() = 'admin');
+CREATE POLICY "Admins can update songs" ON public.songs FOR UPDATE USING (public.get_user_role() = 'admin') WITH CHECK (public.get_user_role() = 'admin');
 CREATE POLICY "Admins can delete songs" ON public.songs FOR DELETE USING (public.get_user_role() = 'admin');
 
 -- 5. Recreate Song Keys policies
@@ -46,7 +46,7 @@ CREATE POLICY "Anyone can view approved keys" ON public.song_keys FOR SELECT USI
 CREATE POLICY "Publishers can view their own pending keys" ON public.song_keys FOR SELECT USING (auth.uid() = created_by);
 CREATE POLICY "Admins can view all keys" ON public.song_keys FOR SELECT USING (public.get_user_role() = 'admin');
 CREATE POLICY "Publishers and admins can insert keys" ON public.song_keys FOR INSERT WITH CHECK (public.get_user_role() IN ('publisher', 'admin'));
-CREATE POLICY "Admins can update keys" ON public.song_keys FOR UPDATE USING (public.get_user_role() = 'admin');
+CREATE POLICY "Admins can update keys" ON public.song_keys FOR UPDATE USING (public.get_user_role() = 'admin') WITH CHECK (public.get_user_role() = 'admin');
 CREATE POLICY "Admins can delete keys" ON public.song_keys FOR DELETE USING (public.get_user_role() = 'admin');
 
 -- 6. Fix the trigger function (add search_path and explicit schema references)
