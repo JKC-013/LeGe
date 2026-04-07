@@ -204,7 +204,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (keyError) throw keyError;
       }
 
-      get().fetchSongs();
+      await get().fetchSongs();
     } catch (err: any) {
       console.error('[CRITICAL] Error adding song:', err);
       // Re-throw so caller (PublisherDashboard) can handle showing the error in UI if needed
@@ -230,7 +230,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
         
       if (error) throw error;
-      get().fetchSongs();
+      await get().fetchSongs();
     } catch (err: any) {
       console.error('[CRITICAL] Error adding key:', err);
       alert(`Could not add key: ${err.message || 'Unknown error'}`);
@@ -259,7 +259,7 @@ export const useStore = create<AppState>((set, get) => ({
         .eq('id', keyId);
         
       if (error) throw error;
-      get().fetchSongs();
+      await get().fetchSongs();
     } catch (err: any) {
       console.error('[CRITICAL] Error removing key:', err);
       alert(`Could not remove key: ${err.message || 'Unknown error'}`);
@@ -279,7 +279,7 @@ export const useStore = create<AppState>((set, get) => ({
         .eq('id', userToUpdate.id);
         
       if (error) throw error;
-      get().fetchUsers();
+      await get().fetchUsers();
     } catch (err: any) {
       console.error('[CRITICAL] Error updating user role:', err);
       alert(`Could not update user role: ${err.message || 'Unknown error'}`);
@@ -407,7 +407,7 @@ export const useStore = create<AppState>((set, get) => ({
         .eq('id', songId);
         
       if (error) throw error;
-      get().fetchSongs();
+      await get().fetchSongs();
     } catch (err: any) {
       console.error('[CRITICAL] Error updating song:', err);
       throw err; 
@@ -433,7 +433,7 @@ export const useStore = create<AppState>((set, get) => ({
         .eq('id', keyId);
         
       if (error) throw error;
-      get().fetchSongs();
+      await get().fetchSongs();
     } catch (err: any) {
       console.error('[CRITICAL] Error updating key PDF:', err);
       throw err;

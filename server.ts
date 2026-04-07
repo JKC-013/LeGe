@@ -1,17 +1,40 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
+import cors from "cors";
 import path from "path";
 import cron from "node-cron";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
+
+  app.use(express.json());
+
+  // CORS configuration - allow requests from Netlify and localhost
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://lege-backend.onrender.com',
+    process.env.FRONTEND_URL || ''  // Add Netlify URL as env var
+  ].filter(Boolean);
+
+  app.use(cors({
+    origin: function(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin) || origin.includes('netlify.app')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
 
   app.use(express.json());
 
   // API routes
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
   // Cron job to keep database awake every 7 days
@@ -37,24 +60,18 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
+  // For production: just serve API (no frontend)
+  // Frontend is deployed separately to Netlify
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Not found. This is the API server.' });
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`🎵 LeGe API Server running on port ${PORT}`);
+    console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
+    console.log(`🔗 CORS enabled for: ${allowedOrigins.join(', ')}`);
   });
 }
 
 startServer();
+

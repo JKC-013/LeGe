@@ -12,3 +12,6 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
+      - key: FRONTEND_URL
+        value: https://your-site.netlify.app
+        sync: false
