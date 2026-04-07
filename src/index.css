@@ -1,0 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0b6468;
+  --color-primary-container: #317d81;
+  --color-on-primary: #ffffff;
+  --color-surface: #fcf9f0;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f6f3ea;
+  --color-surface-container: #f1eee5;
+  --color-surface-container-high: #ebe8df;
+  --color-surface-container-highest: #e5e2d9;
+  --color-on-surface: #1c1c17;
+  --color-on-surface-variant: #454847;
+  --color-outline-variant: #bdc9c8;
+
+  --font-display: "Be Vietnam Pro", "Noto Sans TC", sans-serif;
+  --font-sans: "Inter", "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
+  
+  --shadow-ambient: 0 12px 32px rgba(28, 28, 23, 0.06);
+}
+
+@layer base {
+  html {
+    font-size: 16px;
+  }
+  html[lang="zh"] {
+    font-size: 17.5px;
+  }
+  body {
+    @apply bg-surface text-on-surface font-sans leading-relaxed;
+  }
+}
