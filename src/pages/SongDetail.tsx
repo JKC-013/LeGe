@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
-import { ArrowLeft, Star, FileText, Copy, Check, ExternalLink, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Star, FileText, Copy, Check, ExternalLink, ChevronDown, CheckCircle2, ShoppingCart } from 'lucide-react';
 
 export function SongDetail() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation();
-  const { songs, currentUser, toggleFavourite } = useStore();
+  const { songs, currentUser, toggleFavourite, addToCart, removeFromCart, isInCart } = useStore();
   const [copied, setCopied] = useState(false);
+  const [cartAdded, setCartAdded] = useState(false);
   const [selectedKeyId, setSelectedKeyId] = useState<string>('');
   const [isKeyDropdownOpen, setIsKeyDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -73,6 +74,26 @@ export function SongDetail() {
                   >
                     <Star className="w-6 h-6" fill={isFav ? "currentColor" : "none"} />
                   </button>
+                  <button 
+                    onClick={() => {
+                      if (isInCart(song.id)) {
+                        removeFromCart(song.id);
+                      } else {
+                        addToCart(song.id);
+                        setCartAdded(true);
+                        setTimeout(() => setCartAdded(false), 2000);
+                      }
+                    }}
+                    className={`p-3 rounded-full transition-all ${isInCart(song.id) ? 'text-primary bg-primary/10 hover:bg-primary/20' : 'text-outline-variant hover:bg-surface-container hover:text-on-surface-variant'}`}
+                    title={isInCart(song.id) ? t('cart.removeFromCart') : t('cart.addToCart')}
+                  >
+                    <ShoppingCart className="w-6 h-6" fill={isInCart(song.id) ? "currentColor" : "none"} />
+                  </button>
+                  {cartAdded && (
+                    <div className="absolute top-0 right-0 -mt-2 -mr-8 text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-lg whitespace-nowrap">
+                      ✓ {t('cart.added')}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -2,15 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
-import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X } from 'lucide-react';
+import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X, ShoppingCart } from 'lucide-react';
 import { AuthModal } from './AuthModal';
+import { CartModal } from './CartModal';
 
 export function Layout() {
   const { t, i18n } = useTranslation();
-  const { currentUser, logout } = useStore();
+  const { currentUser, logout, cartItems } = useStore();
   const navigate = useNavigate();
   const [langOpen, setLangOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -161,6 +163,19 @@ export function Layout() {
             
             {currentUser ? (
               <div className="flex items-center space-x-2">
+                {/* Cart Button */}
+                <button 
+                  onClick={() => setIsCartOpen(true)}
+                  className="relative p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-full transition-all"
+                  title={t('nav.cart')}
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  {cartItems.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                      {cartItems.length}
+                    </span>
+                  )}
+                </button>
                 <span className="text-xs sm:text-sm font-medium text-on-surface-variant hidden sm:inline-block truncate max-w-[100px]">{currentUser.email}</span>
                 <button onClick={() => { logout(); navigate('/'); setMobileMenuOpen(false); }} className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2 rounded-full transition-all" title={t('nav.logout')}>
                   <LogOut className="w-5 h-5" />
@@ -187,6 +202,7 @@ export function Layout() {
       </footer>
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+      <CartModal isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
     </div>
   );
 }

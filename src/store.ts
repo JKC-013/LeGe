@@ -43,6 +43,7 @@ interface AppState {
   currentUser: User | null;
   users: User[];
   songs: Song[];
+  cartItems: string[]; // Array of song IDs in ephemeral cart (in-memory only)
   worshipSubmissions: WorshipSubmission[]; // All worship submissions for admin view
   isInitialized: boolean;
   initialize: () => Promise<void>;
@@ -59,6 +60,11 @@ interface AppState {
   updateKeyPdf: (keyId: string, pdfUrl: string) => Promise<void>;
   fetchSongs: () => Promise<void>;
   fetchUsers: () => Promise<void>;
+  // Cart methods (ephemeral shopping cart)
+  addToCart: (songId: string) => void;
+  removeFromCart: (songId: string) => void;
+  clearCart: () => void;
+  isInCart: (songId: string) => boolean;
   // Worship submission methods (cart functionality)
   submitToWorship: (songIds: string[]) => Promise<void>;
   fetchWorshipSubmissions: () => Promise<void>;
@@ -75,6 +81,7 @@ export const useStore = create<AppState>((set, get) => ({
   currentUser: null,
   users: [],
   songs: [],
+  cartItems: [],
   worshipSubmissions: [],
   isInitialized: false,
 
@@ -638,6 +645,28 @@ export const useStore = create<AppState>((set, get) => ({
     // For now, returning the pick count from song data
     const song = get().songs.find(s => s.id === songId);
     return song?.pickCount || 0;
+  },
+
+  // Cart methods (ephemeral shopping cart - in-memory only)
+  addToCart: (songId: string) => {
+    set((state) => ({
+      cartItems: state.cartItems.includes(songId) ? state.cartItems : [...state.cartItems, songId]
+    }));
+  },
+
+  removeFromCart: (songId: string) => {
+    set((state) => ({
+      cartItems: state.cartItems.filter(id => id !== songId)
+    }));
+  },
+
+  clearCart: () => {
+    set({ cartItems: [] });
+  },
+
+  isInCart: (songId: string) => {
+    const { cartItems } = get();
+    return cartItems.includes(songId);
   },
 
   getPendingPublisherCount: () => {
