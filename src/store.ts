@@ -21,12 +21,37 @@ export interface Song {
   lyrics?: string;
   keys?: { id: string; name: string; pdfUrl?: string }[];
   status: 'pending' | 'approved';
+  pickCount?: number; // Number of times picked in last 3 months
+}
+
+export interface CollectionItem {
+  id: string;
+  songId: string;
+  userId: string;
+  createdAt: string;
+}
+
+export interface WorshipSubmission {
+  id: string;
+  userId: string;
+  songIds: string[];
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  approvedAt?: string;
+}
+
+export interface SongPick {
+  id: string;
+  songId: string;
+  pickedAt: string;
 }
 
 interface AppState {
   currentUser: User | null;
   users: User[];
   songs: Song[];
+  userCollection: CollectionItem[]; // User's personal song collection
+  worshipSubmissions: WorshipSubmission[]; // All worship submissions for admin view
   isInitialized: boolean;
   initialize: () => Promise<void>;
   logout: () => Promise<void>;
@@ -42,12 +67,23 @@ interface AppState {
   updateKeyPdf: (keyId: string, pdfUrl: string) => Promise<void>;
   fetchSongs: () => Promise<void>;
   fetchUsers: () => Promise<void>;
+  // Collection methods
+  addToCollection: (songId: string) => Promise<void>;
+  removeFromCollection: (songId: string) => Promise<void>;
+  fetchUserCollection: () => Promise<void>;
+  submitToWorship: (songIds: string[]) => Promise<void>;
+  fetchWorshipSubmissions: () => Promise<void>;
+  approveWorshipSubmission: (submissionId: string) => Promise<void>;
+  declineWorshipSubmission: (submissionId: string) => Promise<void>;
+  getPickCount: (songId: string) => number;
 }
 
 export const useStore = create<AppState>((set, get) => ({
   currentUser: null,
   users: [],
   songs: [],
+  userCollection: [],
+  worshipSubmissions: [],
   isInitialized: false,
 
   initialize: async () => {
@@ -88,8 +124,10 @@ export const useStore = create<AppState>((set, get) => ({
           });
           
           get().fetchSongs();
+          get().fetchUserCollection();
           if (profile.role === 'admin') {
             get().fetchUsers();
+            get().fetchWorshipSubmissions();
           }
         } else {
           console.error("Profile not found for session user ID:", sessionUser.id);
@@ -494,5 +532,180 @@ export const useStore = create<AppState>((set, get) => ({
       }));
       set({ users: formattedUsers });
     }
+  },
+
+  // Collection methods
+  addToCollection: async (songId: string) => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('collections')
+        .insert({
+          user_id: currentUser.id,
+          song_id: songId
+        });
+
+      if (error) throw error;
+      await get().fetchUserCollection();
+    } catch (err: any) {
+      console.error('[CRITICAL] Error adding to collection:', err);
+      alert(`Could not add to collection: ${err.message || 'Unknown error'}`);
+    }
+  },
+
+  removeFromCollection: async (songId: string) => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('collections')
+        .delete()
+        .match({ user_id: currentUser.id, song_id: songId });
+
+      if (error) throw error;
+      await get().fetchUserCollection();
+    } catch (err: any) {
+      console.error('[CRITICAL] Error removing from collection:', err);
+      alert(`Could not remove from collection: ${err.message || 'Unknown error'}`);
+    }
+  },
+
+  fetchUserCollection: async () => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    try {
+      const { data } = await supabase
+        .from('collections')
+        .select('*')
+        .eq('user_id', currentUser.id);
+
+      if (data) {
+        set({ userCollection: data });
+      }
+    } catch (err: any) {
+      console.error('[CRITICAL] Error fetching collection:', err);
+    }
+  },
+
+  submitToWorship: async (songIds: string[]) => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    try {
+      // Create a single worship submission with all songs
+      const { error } = await supabase
+        .from('worship_collections')
+        .insert(
+          songIds.map(songId => ({
+            user_id: currentUser.id,
+            song_id: songId,
+            status: 'pending'
+          }))
+        );
+
+      if (error) throw error;
+      await get().fetchWorshipSubmissions();
+    } catch (err: any) {
+      console.error('[CRITICAL] Error submitting to worship:', err);
+      alert(`Could not submit: ${err.message || 'Unknown error'}`);
+    }
+  },
+
+  fetchWorshipSubmissions: async () => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+
+    try {
+      let query = supabase
+        .from('worship_collections')
+        .select('*');
+
+      // Admins see all submissions, users see their own
+      if (currentUser?.role !== 'admin') {
+        query = query.eq('user_id', currentUser?.id || '');
+      }
+
+      const { data } = await query;
+
+      if (data) {
+        // Group by submission time and status
+        set({ worshipSubmissions: data as any });
+      }
+    } catch (err: any) {
+      console.error('[CRITICAL] Error fetching worship submissions:', err);
+    }
+  },
+
+  approveWorshipSubmission: async (submissionId: string) => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('worship_collections')
+        .update({
+          status: 'approved',
+          approved_by: currentUser.id,
+          approved_at: new Date().toISOString()
+        })
+        .eq('id', submissionId);
+
+      if (error) throw error;
+
+      // Track the pick
+      const submission = get().worshipSubmissions.find(s => s.id === submissionId);
+      if (submission?.songIds) {
+        for (const songId of submission.songIds) {
+          await supabase
+            .from('song_picks')
+            .insert({
+              song_id: songId,
+              approved_by: currentUser.id,
+              picked_at: new Date().toISOString()
+            });
+        }
+      }
+
+      await get().fetchWorshipSubmissions();
+      await get().fetchSongs();
+    } catch (err: any) {
+      console.error('[CRITICAL] Error approving worship submission:', err);
+      alert(`Could not approve: ${err.message || 'Unknown error'}`);
+    }
+  },
+
+  declineWorshipSubmission: async (submissionId: string) => {
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const { error } = await supabase
+        .from('worship_collections')
+        .update({ status: 'rejected' })
+        .eq('id', submissionId);
+
+      if (error) throw error;
+      await get().fetchWorshipSubmissions();
+    } catch (err: any) {
+      console.error('[CRITICAL] Error declining worship submission:', err);
+      alert(`Could not decline: ${err.message || 'Unknown error'}`);
+    }
+  },
+
+  getPickCount: (songId: string) => {
+    if (!isSupabaseConfigured) return 0;
+    
+    // This would require an additional query to get pick counts
+    // For now, returning the pick count from song data
+    const song = get().songs.find(s => s.id === songId);
+    return song?.pickCount || 0;
   }
 }));

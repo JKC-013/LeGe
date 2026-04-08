@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
-import { Globe, LogOut, User as UserIcon, ChevronDown } from 'lucide-react';
+import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X, Bookmark } from 'lucide-react';
 import { AuthModal } from './AuthModal';
 
 export function Layout() {
@@ -11,13 +11,18 @@ export function Layout() {
   const navigate = useNavigate();
   const [langOpen, setLangOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     document.documentElement.lang = i18n.language;
     function handleClickOutside(event: MouseEvent) {
       if (langRef.current && !langRef.current.contains(event.target as Node)) {
         setLangOpen(false);
+      }
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMobileMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -79,32 +84,72 @@ export function Layout() {
             <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary-container rounded-xl flex items-center justify-center text-on-primary font-display font-bold text-xl shadow-ambient group-hover:scale-105 transition-transform">
               L
             </div>
-            <span className="text-xl font-display font-bold tracking-tight text-on-surface">
+            <span className="text-xl font-display font-bold tracking-tight text-on-surface hidden sm:inline">
               Lege's Music
             </span>
           </Link>
           
+          {/* Desktop Navigation */}
           <nav className="hidden md:flex space-x-2">
-            <Link to="/" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all">{t('nav.home')}</Link>
+            <Link to="/" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.home')}</Link>
             {currentUser && (
-              <Link to="/favourites" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all">{t('nav.favourites')}</Link>
+              <>
+                <Link to="/favourites" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.favourites')}</Link>
+                <Link to="/collection" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm flex items-center gap-1">
+                  <Bookmark className="w-4 h-4" />
+                  {t('nav.bookmark')}
+                </Link>
+              </>
             )}
             {(currentUser?.role === 'publisher' || currentUser?.role === 'admin') && (
-              <Link to="/publisher" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all">{t('nav.publisher')}</Link>
+              <Link to="/publisher" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.publisher')}</Link>
             )}
             {currentUser?.role === 'admin' && (
-              <Link to="/admin" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all">{t('nav.admin')}</Link>
+              <Link to="/admin" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.admin')}</Link>
             )}
           </nav>
 
-          <div className="flex items-center space-x-6">
+          {/* Actions */}
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            {/* Mobile Menu Button */}
+            <div className="relative md:hidden" ref={menuRef}>
+              <button 
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-full transition-all"
+              >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+              
+              {mobileMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-surface-container-lowest rounded-xl shadow-ambient border border-outline-variant/15 py-2 z-20 overflow-hidden">
+                  <Link to="/" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.home')}</Link>
+                  {currentUser && (
+                    <>
+                      <Link to="/favourites" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.favourites')}</Link>
+                      <Link to="/collection" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all flex items-center gap-2">
+                        <Bookmark className="w-4 h-4" />
+                        {t('nav.bookmark')}
+                      </Link>
+                    </>
+                  )}
+                  {(currentUser?.role === 'publisher' || currentUser?.role === 'admin') && (
+                    <Link to="/publisher" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.publisher')}</Link>
+                  )}
+                  {currentUser?.role === 'admin' && (
+                    <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.admin')}</Link>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Language Selector */}
             <div className="relative" ref={langRef}>
               <button 
                 onClick={() => setLangOpen(!langOpen)} 
-                className="flex items-center space-x-1 text-on-surface-variant hover:text-primary hover:bg-surface-container px-3 py-2 rounded-full transition-all"
+                className="flex items-center space-x-1 text-on-surface-variant hover:text-primary hover:bg-surface-container px-2 sm:px-3 py-2 rounded-full transition-all text-sm"
               >
                 <Globe className="w-5 h-5" />
-                <span className="text-sm font-medium uppercase">{i18n.language}</span>
+                <span className="hidden sm:inline font-medium uppercase">{i18n.language}</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
               
@@ -127,14 +172,14 @@ export function Layout() {
             </div>
             
             {currentUser ? (
-              <div className="flex items-center space-x-4">
-                <span className="text-sm font-medium text-on-surface-variant hidden sm:inline-block">{currentUser.email}</span>
-                <button onClick={() => { logout(); navigate('/'); }} className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2 rounded-full transition-all" title={t('nav.logout')}>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs sm:text-sm font-medium text-on-surface-variant hidden sm:inline-block truncate max-w-[100px]">{currentUser.email}</span>
+                <button onClick={() => { logout(); navigate('/'); setMobileMenuOpen(false); }} className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2 rounded-full transition-all" title={t('nav.logout')}>
                   <LogOut className="w-5 h-5" />
                 </button>
               </div>
             ) : (
-              <button onClick={handleLogin} className="flex items-center space-x-2 px-6 py-2.5 bg-primary text-on-primary rounded-full hover:bg-primary-container transition-colors text-sm font-medium shadow-ambient">
+              <button onClick={handleLogin} className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-2 bg-primary text-on-primary rounded-full hover:bg-primary-container transition-colors text-xs sm:text-sm font-medium shadow-ambient">
                 <UserIcon className="w-4 h-4" />
                 <span>{t('nav.login')}</span>
               </button>

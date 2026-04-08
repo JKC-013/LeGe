@@ -2,12 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
-import { ArrowLeft, Star, FileText, Copy, Check, ExternalLink, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Star, FileText, Copy, Check, ExternalLink, ChevronDown, Bookmark } from 'lucide-react';
 
 export function SongDetail() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation();
-  const { songs, currentUser, toggleFavourite } = useStore();
+  const { songs, currentUser, toggleFavourite, userCollection, addToCollection, removeFromCollection } = useStore();
   const [copied, setCopied] = useState(false);
   const [selectedKeyId, setSelectedKeyId] = useState<string>('');
   const [isKeyDropdownOpen, setIsKeyDropdownOpen] = useState(false);
@@ -30,12 +30,21 @@ export function SongDetail() {
   }
 
   const isFav = currentUser?.favourites.includes(song.id);
+  const isInCollection = userCollection.some(item => item.songId === song.id);
 
   const handleCopy = () => {
     if (song.lyrics) {
       navigator.clipboard.writeText(song.lyrics);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleToggleCollection = () => {
+    if (isInCollection) {
+      removeFromCollection(song.id);
+    } else {
+      addToCollection(song.id);
     }
   };
 
@@ -59,12 +68,22 @@ export function SongDetail() {
                 </div>
               </div>
               {currentUser && (
-                <button 
-                  onClick={() => toggleFavourite(song.id)}
-                  className={`p-3 rounded-full transition-all ${isFav ? 'text-yellow-500 bg-yellow-50 hover:bg-yellow-100' : 'text-outline-variant hover:bg-surface-container hover:text-on-surface-variant'}`}
-                >
-                  <Star className="w-6 h-6" fill={isFav ? "currentColor" : "none"} />
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => toggleFavourite(song.id)}
+                    className={`p-3 rounded-full transition-all ${isFav ? 'text-yellow-500 bg-yellow-50 hover:bg-yellow-100' : 'text-outline-variant hover:bg-surface-container hover:text-on-surface-variant'}`}
+                    title={t('nav.favourites')}
+                  >
+                    <Star className="w-6 h-6" fill={isFav ? "currentColor" : "none"} />
+                  </button>
+                  <button 
+                    onClick={handleToggleCollection}
+                    className={`p-3 rounded-full transition-all ${isInCollection ? 'text-primary bg-primary/10 hover:bg-primary/20' : 'text-outline-variant hover:bg-surface-container hover:text-on-surface-variant'}`}
+                    title={isInCollection ? t('collection.removeFromCollection') : t('collection.addToCollection')}
+                  >
+                    <Bookmark className="w-6 h-6" fill={isInCollection ? "currentColor" : "none"} />
+                  </button>
+                </div>
               )}
             </div>
 
