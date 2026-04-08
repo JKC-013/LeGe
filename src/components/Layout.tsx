@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
-import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X, Bookmark } from 'lucide-react';
+import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X } from 'lucide-react';
 import { AuthModal } from './AuthModal';
 
 export function Layout() {
@@ -93,13 +93,7 @@ export function Layout() {
           <nav className="hidden md:flex space-x-2">
             <Link to="/" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.home')}</Link>
             {currentUser && (
-              <>
-                <Link to="/favourites" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.favourites')}</Link>
-                <Link to="/collection" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm flex items-center gap-1">
-                  <Bookmark className="w-4 h-4" />
-                  {t('nav.bookmark')}
-                </Link>
-              </>
+              <Link to="/favourites" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.favourites')}</Link>
             )}
             {(currentUser?.role === 'publisher' || currentUser?.role === 'admin') && (
               <Link to="/publisher" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.publisher')}</Link>
@@ -124,13 +118,7 @@ export function Layout() {
                 <div className="absolute right-0 mt-2 w-48 bg-surface-container-lowest rounded-xl shadow-ambient border border-outline-variant/15 py-2 z-20 overflow-hidden">
                   <Link to="/" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.home')}</Link>
                   {currentUser && (
-                    <>
-                      <Link to="/favourites" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.favourites')}</Link>
-                      <Link to="/collection" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all flex items-center gap-2">
-                        <Bookmark className="w-4 h-4" />
-                        {t('nav.bookmark')}
-                      </Link>
-                    </>
+                    <Link to="/favourites" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.favourites')}</Link>
                   )}
                   {(currentUser?.role === 'publisher' || currentUser?.role === 'admin') && (
                     <Link to="/publisher" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.publisher')}</Link>

@@ -11,7 +11,6 @@ import { SongDetail } from './pages/SongDetail';
 import { PublisherDashboard } from './pages/PublisherDashboard';
 import { AdminHub } from './pages/AdminHub';
 import { Favourites } from './pages/Favourites';
-import { Collection } from './pages/Collection';
 import { useStore } from './store';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
@@ -40,11 +39,6 @@ export default function App() {
           <Route path="favourites" element={
             <ProtectedRoute allowedRoles={['user', 'publisher', 'admin']}>
               <Favourites />
-            </ProtectedRoute>
-          } />
-          <Route path="collection" element={
-            <ProtectedRoute allowedRoles={['user', 'publisher', 'admin']}>
-              <Collection />
             </ProtectedRoute>
           } />
           <Route path="publisher" element={

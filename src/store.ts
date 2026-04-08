@@ -24,13 +24,6 @@ export interface Song {
   pickCount?: number; // Number of times picked in last 3 months
 }
 
-export interface CollectionItem {
-  id: string;
-  songId: string;
-  userId: string;
-  createdAt: string;
-}
-
 export interface WorshipSubmission {
   id: string;
   userId: string;
@@ -50,7 +43,6 @@ interface AppState {
   currentUser: User | null;
   users: User[];
   songs: Song[];
-  userCollection: CollectionItem[]; // User's personal song collection
   worshipSubmissions: WorshipSubmission[]; // All worship submissions for admin view
   isInitialized: boolean;
   initialize: () => Promise<void>;
@@ -67,10 +59,7 @@ interface AppState {
   updateKeyPdf: (keyId: string, pdfUrl: string) => Promise<void>;
   fetchSongs: () => Promise<void>;
   fetchUsers: () => Promise<void>;
-  // Collection methods
-  addToCollection: (songId: string) => Promise<void>;
-  removeFromCollection: (songId: string) => Promise<void>;
-  fetchUserCollection: () => Promise<void>;
+  // Worship submission methods (cart functionality)
   submitToWorship: (songIds: string[]) => Promise<void>;
   fetchWorshipSubmissions: () => Promise<void>;
   approveWorshipSubmission: (submissionId: string) => Promise<void>;
@@ -82,7 +71,6 @@ export const useStore = create<AppState>((set, get) => ({
   currentUser: null,
   users: [],
   songs: [],
-  userCollection: [],
   worshipSubmissions: [],
   isInitialized: false,
 
@@ -124,7 +112,6 @@ export const useStore = create<AppState>((set, get) => ({
           });
           
           get().fetchSongs();
-          get().fetchUserCollection();
           if (profile.role === 'admin') {
             get().fetchUsers();
             get().fetchWorshipSubmissions();
@@ -531,66 +518,6 @@ export const useStore = create<AppState>((set, get) => ({
         favourites: [] // We don't need to load everyone's favourites for the admin view
       }));
       set({ users: formattedUsers });
-    }
-  },
-
-  // Collection methods
-  addToCollection: async (songId: string) => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    if (!currentUser) return;
-
-    try {
-      const { error } = await supabase
-        .from('collections')
-        .insert({
-          user_id: currentUser.id,
-          song_id: songId
-        });
-
-      if (error) throw error;
-      await get().fetchUserCollection();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error adding to collection:', err);
-      alert(`Could not add to collection: ${err.message || 'Unknown error'}`);
-    }
-  },
-
-  removeFromCollection: async (songId: string) => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    if (!currentUser) return;
-
-    try {
-      const { error } = await supabase
-        .from('collections')
-        .delete()
-        .match({ user_id: currentUser.id, song_id: songId });
-
-      if (error) throw error;
-      await get().fetchUserCollection();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error removing from collection:', err);
-      alert(`Could not remove from collection: ${err.message || 'Unknown error'}`);
-    }
-  },
-
-  fetchUserCollection: async () => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    if (!currentUser) return;
-
-    try {
-      const { data } = await supabase
-        .from('collections')
-        .select('*')
-        .eq('user_id', currentUser.id);
-
-      if (data) {
-        set({ userCollection: data });
-      }
-    } catch (err: any) {
-      console.error('[CRITICAL] Error fetching collection:', err);
     }
   },
 
