@@ -65,6 +65,10 @@ interface AppState {
   approveWorshipSubmission: (submissionId: string) => Promise<void>;
   declineWorshipSubmission: (submissionId: string) => Promise<void>;
   getPickCount: (songId: string) => number;
+  // Notification count methods
+  getPendingPublisherCount: () => number;
+  getPendingWorshipCount: () => number;
+  getPendingAccessCount: () => number;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -634,5 +638,20 @@ export const useStore = create<AppState>((set, get) => ({
     // For now, returning the pick count from song data
     const song = get().songs.find(s => s.id === songId);
     return song?.pickCount || 0;
+  },
+
+  getPendingPublisherCount: () => {
+    const { songs } = get();
+    return songs.filter(s => s.status === 'pending').length;
+  },
+
+  getPendingWorshipCount: () => {
+    const { worshipSubmissions } = get();
+    return worshipSubmissions.filter(s => s.status === 'pending').length;
+  },
+
+  getPendingAccessCount: () => {
+    const { users } = get();
+    return users.filter(u => u.role === 'user').length; // Count of regular users (could enhance with access requests)
   }
 }));

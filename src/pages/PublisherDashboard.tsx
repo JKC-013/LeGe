@@ -38,7 +38,7 @@ export function PublisherDashboard() {
 
   const filteredSearchSongs = songs.filter(s => 
     s.status === 'approved' && 
-    s.audience === 'worship' && 
+    (s.audience === 'worship' || s.audience === 'band') && 
     (s.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
      s.author.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -165,7 +165,7 @@ export function PublisherDashboard() {
     }
   };
 
-  const approvedWorshipSongs = songs.filter(s => s.status === 'approved' && s.audience === 'worship');
+  const approvedSongsWithKeys = songs.filter(s => s.status === 'approved' && (s.audience === 'worship' || s.audience === 'band'));
 
   return (
     <div className="max-w-3xl mx-auto space-y-12">
@@ -292,7 +292,7 @@ export function PublisherDashboard() {
             </div>
           )}
           
-          {approvedWorshipSongs.length === 0 ? (
+          {approvedSongsWithKeys.length === 0 ? (
             <div className="bg-surface-container-lowest rounded-2xl shadow-ambient p-12 text-center text-outline-variant">
               <KeyRound className="w-12 h-12 mx-auto mb-4 opacity-20" />
               <p className="text-lg">{t('publisher.noSongs')}</p>

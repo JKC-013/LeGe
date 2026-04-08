@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
-import { ArrowLeft, Star, FileText, Copy, Check, ExternalLink, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Star, FileText, Copy, Check, ExternalLink, ChevronDown, CheckCircle2 } from 'lucide-react';
 
 export function SongDetail() {
   const { id } = useParams<{ id: string }>();
@@ -56,6 +56,12 @@ export function SongDetail() {
                   <span className="flex items-center"><span className="font-medium mr-2">{t('song.author')}:</span> {song.author}</span>
                   <span className="w-1 h-1 rounded-full bg-outline-variant"></span>
                   <span className="flex items-center"><span className="font-medium mr-2">{t('song.category')}:</span> {song.category}</span>
+                  {song.pickCount && song.pickCount > 0 && (
+                    <>
+                      <span className="w-1 h-1 rounded-full bg-outline-variant"></span>
+                      <span className="flex items-center text-green-600 font-medium"><CheckCircle2 className="w-4 h-4 mr-2" />{song.pickCount} {t('song.timesPicked')}</span>
+                    </>
+                  )}
                 </div>
               </div>
               {currentUser && (
@@ -71,7 +77,7 @@ export function SongDetail() {
               )}
             </div>
 
-            {song.audience === 'worship' && song.keys && song.keys.length > 0 && (
+            {(song.audience === 'worship' || song.audience === 'band') && song.keys && song.keys.length > 0 && (
               <div className="pt-4 border-t border-outline-variant/15">
                 <label className="block text-sm font-medium text-on-surface mb-2">{t('song.key')}</label>
                 <div className="relative max-w-xs" ref={dropdownRef}>
@@ -136,7 +142,7 @@ export function SongDetail() {
           </div>
         </div>
 
-        {song.audience === 'worship' && song.lyrics && (
+        {(song.audience === 'worship' || song.audience === 'band') && song.lyrics && (
           <div className="mt-12 pt-8 border-t border-[#E5E0D8]">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-semibold text-[#2C3E38]">{t('song.lyrics')}</h3>
