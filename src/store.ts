@@ -31,6 +31,7 @@ export interface WorshipSubmission {
   status: 'pending' | 'approved' | 'rejected';
   submittedAt: string;
   approvedAt?: string;
+  message?: string;
 }
 
 export interface SongPick {
@@ -66,7 +67,7 @@ interface AppState {
   clearCart: () => void;
   isInCart: (songId: string) => boolean;
   // Worship submission methods (cart functionality)
-  submitToWorship: (songIds: string[]) => Promise<void>;
+  submitToWorship: (songIds: string[], message?: string) => Promise<void>;
   fetchWorshipSubmissions: () => Promise<void>;
   approveWorshipSubmission: (submissionId: string) => Promise<void>;
   declineWorshipSubmission: (submissionId: string) => Promise<void>;
@@ -532,32 +533,43 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  submitToWorship: async (songIds: string[]) => {
+  submitToWorship: async (songIds: string[], message?: string) => {
     if (!isSupabaseConfigured) return;
     const { currentUser } = get();
     if (!currentUser) return;
 
     try {
-      // Create a unique submission batch ID
-      const submissionId = `sub_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      
-      // Insert all songs with the same submission ID
-      const { error } = await supabase
+      // Step 1: Create worship_submission batch record
+      const { data: submissionData, error: submissionError } = await supabase
+        .from('worship_submissions')
+        .insert({
+          user_id: currentUser.id,
+          status: 'pending',
+          message: message || null,
+          submitted_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+
+      if (submissionError || !submissionData) throw submissionError || new Error('Failed to create submission');
+
+      // Step 2: Insert songs linked to submission
+      const { error: songsError } = await supabase
         .from('worship_collections')
         .insert(
           songIds.map(songId => ({
             user_id: currentUser.id,
             song_id: songId,
             status: 'pending',
-            submission_id: submissionId // Group songs by submission
+            submission_id: submissionData.id
           }))
         );
 
-      if (error) throw error;
+      if (songsError) throw songsError;
       await get().fetchWorshipSubmissions();
     } catch (err: any) {
       console.error('[CRITICAL] Error submitting to worship:', err);
-      alert(`Could not submit: ${err.message || 'Unknown error'}`);
+      throw err;
     }
   },
 
@@ -566,43 +578,43 @@ export const useStore = create<AppState>((set, get) => ({
     const { currentUser } = get();
 
     try {
-      let query = supabase
-        .from('worship_collections')
+      // Fetch worship_submissions
+      let submissionsQuery = supabase
+        .from('worship_submissions')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('submitted_at', { ascending: false });
 
-      // Admins see all submissions, users see their own
+      // Admins see all, users see their own
       if (currentUser?.role !== 'admin') {
-        query = query.eq('user_id', currentUser?.id || '');
+        submissionsQuery = submissionsQuery.eq('user_id', currentUser?.id || '');
       }
 
-      const { data } = await query;
+      const { data: submissions } = await submissionsQuery;
 
-      if (data) {
-        // Group worship_collections by submission_id or user_id + submitted_at
-        const submissionsMap = new Map<string, typeof data>();
-        
-        data.forEach((row: any) => {
-          const groupKey = row.submission_id || `${row.user_id}_${new Date(row.created_at).toISOString().split('T')[0]}`;
-          if (!submissionsMap.has(groupKey)) {
-            submissionsMap.set(groupKey, []);
-          }
-          submissionsMap.get(groupKey)!.push(row);
-        });
+      if (submissions && submissions.length > 0) {
+        // For each submission, fetch its songs
+        const submissionsWithSongs: WorshipSubmission[] = await Promise.all(
+          submissions.map(async (sub: any) => {
+            const { data: songRows } = await supabase
+              .from('worship_collections')
+              .select('song_id')
+              .eq('submission_id', sub.id);
 
-        // Convert grouped data into WorshipSubmission format
-        const submissions: WorshipSubmission[] = Array.from(submissionsMap.entries()).map(
-          ([key, rows]) => ({
-            id: rows[0].submission_id || key,
-            userId: rows[0].user_id,
-            songIds: rows.map((r: any) => r.song_id),
-            status: rows[0].status,
-            submittedAt: rows[0].created_at || rows[0].submitted_at || new Date().toISOString(),
-            approvedAt: rows[0].approved_at
+            return {
+              id: sub.id,
+              userId: sub.user_id,
+              songIds: songRows?.map((r: any) => r.song_id) || [],
+              status: sub.status,
+              submittedAt: sub.submitted_at,
+              approvedAt: sub.approved_at,
+              message: sub.message
+            };
           })
         );
 
-        set({ worshipSubmissions: submissions });
+        set({ worshipSubmissions: submissionsWithSongs });
+      } else {
+        set({ worshipSubmissions: [] });
       }
     } catch (err: any) {
       console.error('[CRITICAL] Error fetching worship submissions:', err);
@@ -615,29 +627,53 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentUser) return;
 
     try {
-      // Update all songs in this submission batch
-      const { error } = await supabase
+      const approvedAt = new Date().toISOString();
+
+      const { error: submissionError } = await supabase
+        .from('worship_submissions')
+        .update({
+          status: 'approved',
+          approved_by: currentUser.id,
+          approved_at: approvedAt
+        })
+        .eq('id', submissionId);
+
+      if (submissionError) throw submissionError;
+
+      const { error: collectionError } = await supabase
         .from('worship_collections')
         .update({
           status: 'approved',
           approved_by: currentUser.id,
-          approved_at: new Date().toISOString()
+          approved_at: approvedAt
         })
-        .or(`submission_id.eq.${submissionId},id.eq.${submissionId}`);
+        .eq('submission_id', submissionId);
 
-      if (error) throw error;
+      if (collectionError) throw collectionError;
 
-      // Track the pick for each song
-      const submission = get().worshipSubmissions.find(s => s.id === submissionId);
-      if (submission?.songIds) {
-        for (const songId of submission.songIds) {
-          await supabase
+      let songIds = get().worshipSubmissions.find(s => s.id === submissionId)?.songIds;
+
+      if (!songIds) {
+        const { data: songRows, error: songRowsError } = await supabase
+          .from('worship_collections')
+          .select('song_id')
+          .eq('submission_id', submissionId);
+
+        if (songRowsError) throw songRowsError;
+        songIds = songRows?.map((row: any) => row.song_id) || [];
+      }
+
+      if (songIds.length > 0) {
+        for (const songId of songIds) {
+          const { error: pickError } = await supabase
             .from('song_picks')
             .insert({
               song_id: songId,
               approved_by: currentUser.id,
-              picked_at: new Date().toISOString()
+              picked_at: approvedAt
             });
+
+          if (pickError) throw pickError;
         }
       }
 
@@ -651,16 +687,26 @@ export const useStore = create<AppState>((set, get) => ({
 
   declineWorshipSubmission: async (submissionId: string) => {
     if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser) return;
 
     try {
-      // Update all songs in this submission batch
-      const { error } = await supabase
+      const { error: submissionError } = await supabase
+        .from('worship_submissions')
+        .update({ status: 'rejected' })
+        .eq('id', submissionId);
+
+      if (submissionError) throw submissionError;
+
+      const { error: collectionError } = await supabase
         .from('worship_collections')
         .update({ status: 'rejected' })
-        .or(`submission_id.eq.${submissionId},id.eq.${submissionId}`);
+        .eq('submission_id', submissionId);
 
-      if (error) throw error;
+      if (collectionError) throw collectionError;
+
       await get().fetchWorshipSubmissions();
+      await get().fetchSongs();
     } catch (err: any) {
       console.error('[CRITICAL] Error declining worship submission:', err);
       alert(`Could not decline: ${err.message || 'Unknown error'}`);

@@ -318,6 +318,13 @@ export function AdminHub() {
                       </div>
                       
                       <div className="space-y-2 mb-4">
+                        {submission.message && (
+                          <div className="rounded-2xl bg-surface-container-high p-3 text-sm text-on-surface-variant">
+                            <p className="font-medium text-on-surface mb-1">{t('admin.submissionMessage')}</p>
+                            <p>{submission.message}</p>
+                          </div>
+                        )}
+
                         {submissionSongs.map(song => (
                           <button
                             key={song!.id}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { X, ShoppingCart, Trash2, Send, AlertCircle } from 'lucide-react';
@@ -14,6 +15,7 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [message, setMessage] = useState('');
 
   const cartSongs = songs.filter(s => cartItems.includes(s.id));
 
@@ -26,9 +28,10 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
     setIsSubmitting(true);
     setSubmitError('');
     try {
-      await submitToWorship(cartItems);
+      await submitToWorship(cartItems, message);
       setSubmitSuccess(true);
       clearCart();
+      setMessage('');
       setTimeout(() => {
         setSubmitSuccess(false);
         onClose();
@@ -73,10 +76,10 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
                   key={song.id}
                   className="flex items-start justify-between p-3 bg-surface-container rounded-xl border border-outline-variant/15 hover:bg-surface-container-high transition-colors"
                 >
-                  <div className="flex-1 min-w-0">
+                  <Link to={`/song/${song.id}`} className="flex-1 min-w-0 pr-2">
                     <h3 className="font-semibold text-on-surface truncate">{song.title}</h3>
                     <p className="text-xs text-on-surface-variant">{song.author}</p>
-                  </div>
+                  </Link>
                   <button
                     onClick={() => removeFromCart(song.id)}
                     className="ml-2 p-2 hover:bg-red-50 hover:text-red-600 rounded-full transition-colors flex-shrink-0"
@@ -86,6 +89,17 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
                   </button>
                 </div>
               ))}
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-on-surface">{t('cart.messageLabel')}</label>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder={t('cart.messagePlaceholder')}
+                  className="w-full min-h-[96px] p-3 bg-surface-container-highest border border-outline-variant/20 rounded-xl text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary"
+                />
+                <p className="text-xs text-on-surface-variant">{t('cart.messageHelp')}</p>
+              </div>
             </div>
           )}
         </div>

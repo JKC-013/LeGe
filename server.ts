@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import cron from "node-cron";
+import { createClient } from "@supabase/supabase-js";
 
 async function startServer() {
   const app = express();
@@ -32,33 +33,53 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Initialize Supabase client
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+  const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+  const supabase = supabaseUrl && supabaseKey 
+    ? createClient(supabaseUrl, supabaseKey)
+    : null;
+
   // API routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  // Cron job to keep database awake every 7 days
-  // "0 0 * * 0" runs every Sunday at midnight
-  cron.schedule("0 0 * * 0", async () => {
-    console.log("Running cron job to keep database awake...");
+  // Cron job to keep database awake every 30 minutes
+  // Prevents Render free tier from spinning down
+  const keepDatabaseAlive = async () => {
+    console.log(`[${new Date().toISOString()}] Running keep-alive cron job...`);
     try {
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-      const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
-      if (supabaseUrl) {
-        const response = await fetch(`${supabaseUrl}/rest/v1/`, {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`
-          }
-        });
-        console.log(`Supabase ping status: ${response.status}`);
-      } else {
-        console.log("Supabase URL not configured, skipping ping.");
+      if (!supabase) {
+        console.log("Supabase not configured, skipping keep-alive.");
+        return;
       }
-    } catch (e) {
-      console.error("Failed to ping Supabase:", e);
+
+      // Query songs table to keep database connection active
+      const { data, error } = await supabase
+        .from('songs')
+        .select('count')
+        .limit(1);
+
+      if (error) {
+        console.error(`[CRON] Error querying database: ${error.message}`);
+      } else {
+        console.log(`[CRON] Database keep-alive successful - Songs count retrieved`);
+      }
+    } catch (e: any) {
+      console.error(`[CRON] Failed to keep database alive: ${e.message}`);
     }
-  });
+  };
+
+  // Run keep-alive every 30 minutes
+  cron.schedule("*/30 * * * *", keepDatabaseAlive);
+  console.log("✓ Database keep-alive scheduled every 30 minutes");
+
+  // Also run once on startup after a short delay
+  setTimeout(() => {
+    console.log("Running initial keep-alive on startup...");
+    keepDatabaseAlive();
+  }, 2000);
 
   // For production: just serve API (no frontend)
   // Frontend is deployed separately to Netlify
@@ -70,6 +91,7 @@ async function startServer() {
     console.log(`🎵 LeGe API Server running on port ${PORT}`);
     console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
     console.log(`🔗 CORS enabled for: ${allowedOrigins.join(', ')}`);
+    console.log(`⏰ Database keep-alive: Every 30 minutes`);
   });
 }
 
