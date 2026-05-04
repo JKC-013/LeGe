@@ -538,14 +538,18 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentUser) return;
 
     try {
-      // Create a single worship submission with all songs
+      // Create a unique submission batch ID
+      const submissionId = `sub_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      
+      // Insert all songs with the same submission ID
       const { error } = await supabase
         .from('worship_collections')
         .insert(
           songIds.map(songId => ({
             user_id: currentUser.id,
             song_id: songId,
-            status: 'pending'
+            status: 'pending',
+            submission_id: submissionId // Group songs by submission
           }))
         );
 
@@ -564,7 +568,8 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       let query = supabase
         .from('worship_collections')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: false });
 
       // Admins see all submissions, users see their own
       if (currentUser?.role !== 'admin') {
@@ -574,8 +579,30 @@ export const useStore = create<AppState>((set, get) => ({
       const { data } = await query;
 
       if (data) {
-        // Group by submission time and status
-        set({ worshipSubmissions: data as any });
+        // Group worship_collections by submission_id or user_id + submitted_at
+        const submissionsMap = new Map<string, typeof data>();
+        
+        data.forEach((row: any) => {
+          const groupKey = row.submission_id || `${row.user_id}_${new Date(row.created_at).toISOString().split('T')[0]}`;
+          if (!submissionsMap.has(groupKey)) {
+            submissionsMap.set(groupKey, []);
+          }
+          submissionsMap.get(groupKey)!.push(row);
+        });
+
+        // Convert grouped data into WorshipSubmission format
+        const submissions: WorshipSubmission[] = Array.from(submissionsMap.entries()).map(
+          ([key, rows]) => ({
+            id: rows[0].submission_id || key,
+            userId: rows[0].user_id,
+            songIds: rows.map((r: any) => r.song_id),
+            status: rows[0].status,
+            submittedAt: rows[0].created_at || rows[0].submitted_at || new Date().toISOString(),
+            approvedAt: rows[0].approved_at
+          })
+        );
+
+        set({ worshipSubmissions: submissions });
       }
     } catch (err: any) {
       console.error('[CRITICAL] Error fetching worship submissions:', err);
@@ -588,6 +615,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentUser) return;
 
     try {
+      // Update all songs in this submission batch
       const { error } = await supabase
         .from('worship_collections')
         .update({
@@ -595,11 +623,11 @@ export const useStore = create<AppState>((set, get) => ({
           approved_by: currentUser.id,
           approved_at: new Date().toISOString()
         })
-        .eq('id', submissionId);
+        .or(`submission_id.eq.${submissionId},id.eq.${submissionId}`);
 
       if (error) throw error;
 
-      // Track the pick
+      // Track the pick for each song
       const submission = get().worshipSubmissions.find(s => s.id === submissionId);
       if (submission?.songIds) {
         for (const songId of submission.songIds) {
@@ -625,10 +653,11 @@ export const useStore = create<AppState>((set, get) => ({
     if (!isSupabaseConfigured) return;
 
     try {
+      // Update all songs in this submission batch
       const { error } = await supabase
         .from('worship_collections')
         .update({ status: 'rejected' })
-        .eq('id', submissionId);
+        .or(`submission_id.eq.${submissionId},id.eq.${submissionId}`);
 
       if (error) throw error;
       await get().fetchWorshipSubmissions();
