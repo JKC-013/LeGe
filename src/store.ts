@@ -151,6 +151,7 @@ export const useStore = create<AppState>((set, get) => ({
           });
           
           get().fetchSongs();
+          get().fetchNotifications();
           if (profile.role === 'admin') {
             get().fetchUsers();
             get().fetchWorshipSubmissions();

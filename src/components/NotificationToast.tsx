@@ -5,11 +5,12 @@ import { useTranslation } from 'react-i18next';
 
 export function NotificationToast() {
   const { t } = useTranslation();
-  const { notifications, markNotificationAsRead, deleteNotification, clearAllNotifications, fetchNotifications, songs } = useStore();
+  const { currentUser, notifications, markNotificationAsRead, deleteNotification, clearAllNotifications, fetchNotifications, songs } = useStore();
 
   useEffect(() => {
+    if (!currentUser) return;
     fetchNotifications();
-  }, [fetchNotifications]);
+  }, [currentUser, fetchNotifications]);
 
   const unreadNotifications = notifications.filter(n => !n.read);
 
