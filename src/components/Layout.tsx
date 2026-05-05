@@ -5,6 +5,7 @@ import { useStore } from '../store';
 import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X, ShoppingCart } from 'lucide-react';
 import { AuthModal } from './AuthModal';
 import { CartModal } from './CartModal';
+import { NotificationToast } from './NotificationToast';
 
 export function Layout() {
   const { t, i18n } = useTranslation();
@@ -203,6 +204,7 @@ export function Layout() {
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
       <CartModal isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      <NotificationToast />
     </div>
   );
 }

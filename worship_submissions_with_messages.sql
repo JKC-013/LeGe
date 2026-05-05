@@ -37,3 +37,31 @@ ON public.worship_submissions(status);
 
 CREATE INDEX idx_worship_submissions_user_id 
 ON public.worship_submissions(user_id);
+
+-- Notifications table for user notifications
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  type TEXT NOT NULL, -- e.g., 'worship_approved', 'worship_rejected', 'song_approved', etc.
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  data JSONB, -- Additional data like submission_id, song_id, etc.
+  read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+-- Notification policies
+CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT 
+  USING (auth.uid() = user_id);
+CREATE POLICY "Users can update own notifications" ON public.notifications FOR UPDATE 
+  USING (auth.uid() = user_id);
+CREATE POLICY "System can insert notifications" ON public.notifications FOR INSERT 
+  WITH CHECK (true); -- Allow inserts from service role
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id 
+ON public.notifications(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_read 
+ON public.notifications(read);

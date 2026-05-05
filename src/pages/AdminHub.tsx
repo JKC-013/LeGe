@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 
 export function AdminHub() {
   const { t } = useTranslation();
-  const { users, songs, updateUserRole, approveSong, declineSong, deleteSong, updateSong, worshipSubmissions, fetchWorshipSubmissions, approveWorshipSubmission, declineWorshipSubmission } = useStore();
+  const { users, songs, updateUserRole, approveSong, declineSong, deleteSong, updateSong, worshipSubmissions, fetchWorshipSubmissions, approveWorshipSubmission, declineWorshipSubmission, deleteWorshipSubmission } = useStore();
   const [activeTab, setActiveTab] = useState<'access' | 'publisher' | 'score' | 'worship'>('access');
   const [searchEmail, setSearchEmail] = useState('');
   const [scoreSearch, setScoreSearch] = useState('');
@@ -369,6 +369,28 @@ export function AdminHub() {
                           >
                             {processingId === submission.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
                             {t('admin.decline')}
+                          </button>
+                        </div>
+                      )}
+
+                      {!isPending && (
+                        <div className="flex justify-end">
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(t('admin.confirmDeleteSubmission'))) {
+                                setProcessingId(submission.id);
+                                try {
+                                  await deleteWorshipSubmission(submission.id);
+                                } finally {
+                                  setProcessingId(null);
+                                }
+                              }
+                            }}
+                            disabled={processingId === submission.id}
+                            className="flex items-center gap-2 px-3 py-1 bg-red-600 text-white text-sm font-bold rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {processingId === submission.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            {t('admin.delete')}
                           </button>
                         </div>
                       )}

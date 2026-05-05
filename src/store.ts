@@ -48,12 +48,24 @@ export interface SongPick {
   pickedAt: string;
 }
 
+export interface Notification {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  data?: any;
+  read: boolean;
+  createdAt: string;
+}
+
 interface AppState {
   currentUser: User | null;
   users: User[];
   songs: Song[];
   cartItems: string[]; // Array of song IDs in ephemeral cart (in-memory only)
   worshipSubmissions: WorshipSubmission[]; // All worship submissions for admin view
+  notifications: Notification[];
   isInitialized: boolean;
   initialize: () => Promise<void>;
   logout: () => Promise<void>;
@@ -79,7 +91,12 @@ interface AppState {
   fetchWorshipSubmissions: () => Promise<void>;
   approveWorshipSubmission: (submissionId: string) => Promise<void>;
   declineWorshipSubmission: (submissionId: string) => Promise<void>;
+  deleteWorshipSubmission: (submissionId: string) => Promise<void>;
   getPickCount: (songId: string) => number;
+  // Notification methods
+  fetchNotifications: () => Promise<void>;
+  markNotificationAsRead: (notificationId: string) => Promise<void>;
+  deleteNotification: (notificationId: string) => Promise<void>;
   // Notification count methods
   getPendingPublisherCount: () => number;
   getPendingWorshipCount: () => number;
@@ -92,6 +109,7 @@ export const useStore = create<AppState>((set, get) => ({
   songs: [],
   cartItems: [],
   worshipSubmissions: [],
+  notifications: [],
   isInitialized: false,
 
   initialize: async () => {
@@ -690,6 +708,21 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const approvedAt = new Date().toISOString();
 
+      // Get submission details for notification
+      let submissionUserId: string | null = null;
+      let submissionMessage: string | null = null;
+
+      const { data: submissionData, error: fetchError } = await supabase
+        .from('worship_submissions')
+        .select('user_id, message')
+        .eq('id', submissionId)
+        .single();
+
+      if (!fetchError && submissionData) {
+        submissionUserId = submissionData.user_id;
+        submissionMessage = submissionData.message;
+      }
+
       let isCollectionFallback = false;
       const { error: submissionError } = await supabase
         .from('worship_submissions')
@@ -722,11 +755,13 @@ export const useStore = create<AppState>((set, get) => ({
 
         const { data: songRow, error: songRowError } = await supabase
           .from('worship_collections')
-          .select('song_id')
+          .select('song_id, user_id')
           .eq('id', submissionId)
           .single();
 
         if (songRowError) throw songRowError;
+
+        submissionUserId = songRow?.user_id || submissionUserId;
 
         if (songRow?.song_id) {
           const { error: pickError } = await supabase
@@ -778,6 +813,24 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
 
+      // Insert notification for approval
+      if (submissionUserId) {
+        const { error: notificationError } = await supabase
+          .from('notifications')
+          .insert({
+            user_id: submissionUserId,
+            type: 'worship_approved',
+            title: 'Worship Submission Approved',
+            message: submissionMessage || 'Your worship submission has been approved and added to the worship list.',
+            data: { submissionId },
+            read: false
+          });
+
+        if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
+          console.warn('[WARN] Could not insert approval notification:', notificationError);
+        }
+      }
+
       await get().fetchWorshipSubmissions();
       await get().fetchSongs();
     } catch (err: any) {
@@ -792,6 +845,21 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentUser) return;
 
     try {
+      // Get submission details for notification
+      let submissionUserId: string | null = null;
+      let submissionMessage: string | null = null;
+
+      const { data: submissionData, error: fetchError } = await supabase
+        .from('worship_submissions')
+        .select('user_id, message')
+        .eq('id', submissionId)
+        .single();
+
+      if (!fetchError && submissionData) {
+        submissionUserId = submissionData.user_id;
+        submissionMessage = submissionData.message;
+      }
+
       let isCollectionFallback = false;
       const { error: submissionError } = await supabase
         .from('worship_submissions')
@@ -813,6 +881,17 @@ export const useStore = create<AppState>((set, get) => ({
           .eq('id', submissionId);
 
         if (collectionError) throw collectionError;
+
+        // Get user_id from collection for fallback
+        const { data: collectionData, error: collectionFetchError } = await supabase
+          .from('worship_collections')
+          .select('user_id')
+          .eq('id', submissionId)
+          .single();
+
+        if (!collectionFetchError && collectionData) {
+          submissionUserId = collectionData.user_id;
+        }
       } else {
         const { error: collectionError } = await supabase
           .from('worship_collections')
@@ -822,11 +901,73 @@ export const useStore = create<AppState>((set, get) => ({
         if (collectionError) throw collectionError;
       }
 
+      // Insert notification for rejection
+      if (submissionUserId) {
+        const { error: notificationError } = await supabase
+          .from('notifications')
+          .insert({
+            user_id: submissionUserId,
+            type: 'worship_rejected',
+            title: 'Worship Submission Rejected',
+            message: submissionMessage || 'Your worship submission has been rejected.',
+            data: { submissionId },
+            read: false
+          });
+
+        if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
+          console.warn('[WARN] Could not insert rejection notification:', notificationError);
+        }
+      }
+
       await get().fetchWorshipSubmissions();
       await get().fetchSongs();
     } catch (err: any) {
       console.error('[CRITICAL] Error declining worship submission:', err);
       alert(`Could not decline: ${err.message || 'Unknown error'}`);
+    }
+  },
+
+  deleteWorshipSubmission: async (submissionId: string) => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser || currentUser.role !== 'admin') return;
+
+    try {
+      let isCollectionFallback = false;
+      const { error: submissionError } = await supabase
+        .from('worship_submissions')
+        .delete()
+        .eq('id', submissionId);
+
+      if (submissionError) {
+        if (isMissingTableError(submissionError, 'worship_submissions')) {
+          isCollectionFallback = true;
+        } else {
+          throw submissionError;
+        }
+      }
+
+      if (isCollectionFallback) {
+        const { error: collectionError } = await supabase
+          .from('worship_collections')
+          .delete()
+          .eq('id', submissionId);
+
+        if (collectionError) throw collectionError;
+      } else {
+        // Delete associated collection entries
+        const { error: collectionError } = await supabase
+          .from('worship_collections')
+          .delete()
+          .eq('submission_id', submissionId);
+
+        if (collectionError) throw collectionError;
+      }
+
+      await get().fetchWorshipSubmissions();
+    } catch (err: any) {
+      console.error('[CRITICAL] Error deleting worship submission:', err);
+      alert(`Could not delete submission: ${err.message || 'Unknown error'}`);
     }
   },
 
@@ -874,5 +1015,83 @@ export const useStore = create<AppState>((set, get) => ({
   getPendingAccessCount: () => {
     const { users } = get();
     return users.filter(u => u.role === 'user').length; // Count of regular users (could enhance with access requests)
+  },
+
+  // Notification methods
+  fetchNotifications: async () => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        if (isMissingTableError(error, 'notifications')) {
+          set({ notifications: [] });
+          return;
+        }
+        throw error;
+      }
+
+      const formattedNotifications: Notification[] = (data || []).map(n => ({
+        id: n.id,
+        userId: n.user_id,
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        data: n.data,
+        read: n.read,
+        createdAt: n.created_at
+      }));
+
+      set({ notifications: formattedNotifications });
+    } catch (err: any) {
+      console.error('[CRITICAL] Error fetching notifications:', err);
+    }
+  },
+
+  markNotificationAsRead: async (notificationId: string) => {
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', notificationId);
+
+      if (error) throw error;
+
+      set(state => ({
+        notifications: state.notifications.map(n =>
+          n.id === notificationId ? { ...n, read: true } : n
+        )
+      }));
+    } catch (err: any) {
+      console.error('[CRITICAL] Error marking notification as read:', err);
+    }
+  },
+
+  deleteNotification: async (notificationId: string) => {
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', notificationId);
+
+      if (error) throw error;
+
+      set(state => ({
+        notifications: state.notifications.filter(n => n.id !== notificationId)
+      }));
+    } catch (err: any) {
+      console.error('[CRITICAL] Error deleting notification:', err);
+    }
   }
 }));
