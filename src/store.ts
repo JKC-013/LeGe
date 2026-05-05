@@ -97,6 +97,7 @@ interface AppState {
   fetchNotifications: () => Promise<void>;
   markNotificationAsRead: (notificationId: string) => Promise<void>;
   deleteNotification: (notificationId: string) => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
   // Notification count methods
   getPendingPublisherCount: () => number;
   getPendingWorshipCount: () => number;
@@ -726,11 +727,7 @@ export const useStore = create<AppState>((set, get) => ({
       let isCollectionFallback = false;
       const { error: submissionError } = await supabase
         .from('worship_submissions')
-        .update({
-          status: 'approved',
-          approved_by: currentUser.id,
-          approved_at: approvedAt
-        })
+        .delete()
         .eq('id', submissionId);
 
       if (submissionError) {
@@ -744,11 +741,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (isCollectionFallback) {
         const { error: collectionError } = await supabase
           .from('worship_collections')
-          .update({
-            status: 'approved',
-            approved_by: currentUser.id,
-            approved_at: approvedAt
-          })
+          .delete()
           .eq('id', submissionId);
 
         if (collectionError) throw collectionError;
@@ -762,6 +755,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (songRowError) throw songRowError;
 
         submissionUserId = songRow?.user_id || submissionUserId;
+        const songIds = songRow?.song_id ? [songRow.song_id] : [];
 
         if (songRow?.song_id) {
           const { error: pickError } = await supabase
@@ -769,66 +763,85 @@ export const useStore = create<AppState>((set, get) => ({
             .insert({
               song_id: songRow.song_id,
               approved_by: currentUser.id,
-              picked_at: approvedAt
+              picked_at: new Date().toISOString()
             });
 
           if (pickError) throw pickError;
         }
+
+        // Insert notification for approval
+        if (submissionUserId) {
+          const songTitles = songIds.map(id => get().songs.find(s => s.id === id)?.title).filter(Boolean);
+          const { error: notificationError } = await supabase
+            .from('notifications')
+            .insert({
+              user_id: submissionUserId,
+              type: 'worship_approved',
+              title: 'Worship Submission Approved',
+              message: songTitles.length > 0 
+                ? `Your submission for "${songTitles.join(', ')}" has been approved and added to the worship list.`
+                : submissionMessage || 'Your worship submission has been approved and added to the worship list.',
+              data: { submissionId, songIds, status: 'approved' },
+              read: false
+            });
+
+          if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
+            console.warn('[WARN] Could not insert approval notification:', notificationError);
+          }
+        }
       } else {
+        // Delete associated collection entries
+        const { data: collectionData, error: collectionFetchError } = await supabase
+          .from('worship_collections')
+          .select('song_id')
+          .eq('submission_id', submissionId);
+
+        if (!collectionFetchError && collectionData) {
+          const songIds = collectionData.map((row: any) => row.song_id);
+
+          // Add to song_picks for each song
+          if (songIds.length > 0) {
+            for (const songId of songIds) {
+              const { error: pickError } = await supabase
+                .from('song_picks')
+                .insert({
+                  song_id: songId,
+                  approved_by: currentUser.id,
+                  picked_at: new Date().toISOString()
+                });
+
+              if (pickError) throw pickError;
+            }
+          }
+
+          // Insert notification for approval
+          if (submissionUserId) {
+            const songTitles = songIds.map(id => get().songs.find(s => s.id === id)?.title).filter(Boolean);
+            const { error: notificationError } = await supabase
+              .from('notifications')
+              .insert({
+                user_id: submissionUserId,
+                type: 'worship_approved',
+                title: 'Worship Submission Approved',
+                message: songTitles.length > 0 
+                  ? `Your submission for "${songTitles.join(', ')}" has been approved and added to the worship list.`
+                  : submissionMessage || 'Your worship submission has been approved and added to the worship list.',
+                data: { submissionId, songIds, status: 'approved' },
+                read: false
+              });
+
+            if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
+              console.warn('[WARN] Could not insert approval notification:', notificationError);
+            }
+          }
+        }
+
         const { error: collectionError } = await supabase
           .from('worship_collections')
-          .update({
-            status: 'approved',
-            approved_by: currentUser.id,
-            approved_at: approvedAt
-          })
+          .delete()
           .eq('submission_id', submissionId);
 
         if (collectionError) throw collectionError;
-
-        let songIds = get().worshipSubmissions.find(s => s.id === submissionId)?.songIds;
-
-        if (!songIds) {
-          const { data: songRows, error: songRowsError } = await supabase
-            .from('worship_collections')
-            .select('song_id')
-            .eq('submission_id', submissionId);
-
-          if (songRowsError) throw songRowsError;
-          songIds = songRows?.map((row: any) => row.song_id) || [];
-        }
-
-        if (songIds.length > 0) {
-          for (const songId of songIds) {
-            const { error: pickError } = await supabase
-              .from('song_picks')
-              .insert({
-                song_id: songId,
-                approved_by: currentUser.id,
-                picked_at: approvedAt
-              });
-
-            if (pickError) throw pickError;
-          }
-        }
-      }
-
-      // Insert notification for approval
-      if (submissionUserId) {
-        const { error: notificationError } = await supabase
-          .from('notifications')
-          .insert({
-            user_id: submissionUserId,
-            type: 'worship_approved',
-            title: 'Worship Submission Approved',
-            message: submissionMessage || 'Your worship submission has been approved and added to the worship list.',
-            data: { submissionId },
-            read: false
-          });
-
-        if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
-          console.warn('[WARN] Could not insert approval notification:', notificationError);
-        }
       }
 
       await get().fetchWorshipSubmissions();
@@ -863,7 +876,7 @@ export const useStore = create<AppState>((set, get) => ({
       let isCollectionFallback = false;
       const { error: submissionError } = await supabase
         .from('worship_submissions')
-        .update({ status: 'rejected' })
+        .delete()
         .eq('id', submissionId);
 
       if (submissionError) {
@@ -877,7 +890,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (isCollectionFallback) {
         const { error: collectionError } = await supabase
           .from('worship_collections')
-          .update({ status: 'rejected' })
+          .delete()
           .eq('id', submissionId);
 
         if (collectionError) throw collectionError;
@@ -892,31 +905,62 @@ export const useStore = create<AppState>((set, get) => ({
         if (!collectionFetchError && collectionData) {
           submissionUserId = collectionData.user_id;
         }
+
+        // Insert notification for rejection
+        if (submissionUserId) {
+          const { error: notificationError } = await supabase
+            .from('notifications')
+            .insert({
+              user_id: submissionUserId,
+              type: 'worship_rejected',
+              title: 'Worship Submission Rejected',
+              message: submissionMessage || 'Your worship submission has been rejected.',
+              data: { submissionId, status: 'rejected' },
+              read: false
+            });
+
+          if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
+            console.warn('[WARN] Could not insert rejection notification:', notificationError);
+          }
+        }
       } else {
+        // Delete associated collection entries
+        const { data: collectionData, error: collectionFetchError } = await supabase
+          .from('worship_collections')
+          .select('song_id')
+          .eq('submission_id', submissionId);
+
+        if (!collectionFetchError && collectionData) {
+          const songIds = collectionData.map((row: any) => row.song_id);
+
+          // Insert notification for rejection
+          if (submissionUserId) {
+            const songTitles = songIds.map(id => get().songs.find(s => s.id === id)?.title).filter(Boolean);
+            const { error: notificationError } = await supabase
+              .from('notifications')
+              .insert({
+                user_id: submissionUserId,
+                type: 'worship_rejected',
+                title: 'Worship Submission Rejected',
+                message: songTitles.length > 0 
+                  ? `Your submission for "${songTitles.join(', ')}" has been rejected.`
+                  : submissionMessage || 'Your worship submission has been rejected.',
+                data: { submissionId, songIds, status: 'rejected' },
+                read: false
+              });
+
+            if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
+              console.warn('[WARN] Could not insert rejection notification:', notificationError);
+            }
+          }
+        }
+
         const { error: collectionError } = await supabase
           .from('worship_collections')
-          .update({ status: 'rejected' })
+          .delete()
           .eq('submission_id', submissionId);
 
         if (collectionError) throw collectionError;
-      }
-
-      // Insert notification for rejection
-      if (submissionUserId) {
-        const { error: notificationError } = await supabase
-          .from('notifications')
-          .insert({
-            user_id: submissionUserId,
-            type: 'worship_rejected',
-            title: 'Worship Submission Rejected',
-            message: submissionMessage || 'Your worship submission has been rejected.',
-            data: { submissionId },
-            read: false
-          });
-
-        if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
-          console.warn('[WARN] Could not insert rejection notification:', notificationError);
-        }
       }
 
       await get().fetchWorshipSubmissions();
@@ -1092,6 +1136,25 @@ export const useStore = create<AppState>((set, get) => ({
       }));
     } catch (err: any) {
       console.error('[CRITICAL] Error deleting notification:', err);
+    }
+  },
+
+  clearAllNotifications: async () => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+
+      set({ notifications: [] });
+    } catch (err: any) {
+      console.error('[CRITICAL] Error clearing all notifications:', err);
     }
   }
 }));
