@@ -37,7 +37,7 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
         onClose();
       }, 2000);
     } catch (err: any) {
-      setSubmitError(err.message || t('cart.submitError'));
+      setSubmitError((err && (err.message || String(err))) || t('cart.submitError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -76,7 +76,11 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
                   key={song.id}
                   className="flex items-start justify-between p-3 bg-surface-container rounded-xl border border-outline-variant/15 hover:bg-surface-container-high transition-colors"
                 >
-                  <Link to={`/song/${song.id}`} className="flex-1 min-w-0 pr-2">
+                  <Link
+                    to={`/song/${song.id}`}
+                    onClick={onClose}
+                    className="flex-1 min-w-0 pr-2 block"
+                  >
                     <h3 className="font-semibold text-on-surface truncate">{song.title}</h3>
                     <p className="text-xs text-on-surface-variant">{song.author}</p>
                   </Link>

@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 
+const isMissingTableError = (error: any, tableName: string) => {
+  const message = error?.message || '';
+  return typeof message === 'string' && (
+    message.includes(`Could not find the table 'public.${tableName}'`) ||
+    message.includes(`relation \"${tableName}\" does not exist`)
+  );
+};
+
 export type UserRole = 'user' | 'publisher' | 'admin';
 
 export interface User {
@@ -551,7 +559,28 @@ export const useStore = create<AppState>((set, get) => ({
         .select('id')
         .single();
 
-      if (submissionError || !submissionData) throw submissionError || new Error('Failed to create submission');
+      if (submissionError) {
+        if (isMissingTableError(submissionError, 'worship_submissions')) {
+          const { error: fallbackError } = await supabase
+            .from('worship_collections')
+            .insert(
+              songIds.map(songId => ({
+                user_id: currentUser.id,
+                song_id: songId,
+                status: 'pending',
+                submitted_at: new Date().toISOString()
+              }))
+            );
+
+          if (fallbackError) throw fallbackError;
+          await get().fetchWorshipSubmissions();
+          return;
+        }
+
+        throw submissionError;
+      }
+
+      if (!submissionData) throw new Error('Failed to create submission');
 
       // Step 2: Insert songs linked to submission
       const { error: songsError } = await supabase
@@ -589,7 +618,39 @@ export const useStore = create<AppState>((set, get) => ({
         submissionsQuery = submissionsQuery.eq('user_id', currentUser?.id || '');
       }
 
-      const { data: submissions } = await submissionsQuery;
+      const { data: submissions, error: submissionsError } = await submissionsQuery;
+
+      if (submissionsError) {
+        if (isMissingTableError(submissionsError, 'worship_submissions')) {
+          let collectionQuery = supabase
+            .from('worship_collections')
+            .select('id,user_id,song_id,status,submitted_at,approved_at')
+            .order('submitted_at', { ascending: false });
+
+          if (currentUser?.role !== 'admin') {
+            collectionQuery = collectionQuery.eq('user_id', currentUser?.id || '');
+          }
+
+          const { data: collectionRows, error: collectionError } = await collectionQuery;
+
+          if (collectionError) throw collectionError;
+
+          const fallbackSubmissions: WorshipSubmission[] = (collectionRows || []).map((row: any) => ({
+            id: row.id,
+            userId: row.user_id,
+            songIds: [row.song_id],
+            status: row.status,
+            submittedAt: row.submitted_at,
+            approvedAt: row.approved_at,
+            message: undefined
+          }));
+
+          set({ worshipSubmissions: fallbackSubmissions });
+          return;
+        }
+
+        throw submissionsError;
+      }
 
       if (submissions && submissions.length > 0) {
         // For each submission, fetch its songs
@@ -629,6 +690,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const approvedAt = new Date().toISOString();
 
+      let isCollectionFallback = false;
       const { error: submissionError } = await supabase
         .from('worship_submissions')
         .update({
@@ -638,42 +700,81 @@ export const useStore = create<AppState>((set, get) => ({
         })
         .eq('id', submissionId);
 
-      if (submissionError) throw submissionError;
-
-      const { error: collectionError } = await supabase
-        .from('worship_collections')
-        .update({
-          status: 'approved',
-          approved_by: currentUser.id,
-          approved_at: approvedAt
-        })
-        .eq('submission_id', submissionId);
-
-      if (collectionError) throw collectionError;
-
-      let songIds = get().worshipSubmissions.find(s => s.id === submissionId)?.songIds;
-
-      if (!songIds) {
-        const { data: songRows, error: songRowsError } = await supabase
-          .from('worship_collections')
-          .select('song_id')
-          .eq('submission_id', submissionId);
-
-        if (songRowsError) throw songRowsError;
-        songIds = songRows?.map((row: any) => row.song_id) || [];
+      if (submissionError) {
+        if (isMissingTableError(submissionError, 'worship_submissions')) {
+          isCollectionFallback = true;
+        } else {
+          throw submissionError;
+        }
       }
 
-      if (songIds.length > 0) {
-        for (const songId of songIds) {
+      if (isCollectionFallback) {
+        const { error: collectionError } = await supabase
+          .from('worship_collections')
+          .update({
+            status: 'approved',
+            approved_by: currentUser.id,
+            approved_at: approvedAt
+          })
+          .eq('id', submissionId);
+
+        if (collectionError) throw collectionError;
+
+        const { data: songRow, error: songRowError } = await supabase
+          .from('worship_collections')
+          .select('song_id')
+          .eq('id', submissionId)
+          .single();
+
+        if (songRowError) throw songRowError;
+
+        if (songRow?.song_id) {
           const { error: pickError } = await supabase
             .from('song_picks')
             .insert({
-              song_id: songId,
+              song_id: songRow.song_id,
               approved_by: currentUser.id,
               picked_at: approvedAt
             });
 
           if (pickError) throw pickError;
+        }
+      } else {
+        const { error: collectionError } = await supabase
+          .from('worship_collections')
+          .update({
+            status: 'approved',
+            approved_by: currentUser.id,
+            approved_at: approvedAt
+          })
+          .eq('submission_id', submissionId);
+
+        if (collectionError) throw collectionError;
+
+        let songIds = get().worshipSubmissions.find(s => s.id === submissionId)?.songIds;
+
+        if (!songIds) {
+          const { data: songRows, error: songRowsError } = await supabase
+            .from('worship_collections')
+            .select('song_id')
+            .eq('submission_id', submissionId);
+
+          if (songRowsError) throw songRowsError;
+          songIds = songRows?.map((row: any) => row.song_id) || [];
+        }
+
+        if (songIds.length > 0) {
+          for (const songId of songIds) {
+            const { error: pickError } = await supabase
+              .from('song_picks')
+              .insert({
+                song_id: songId,
+                approved_by: currentUser.id,
+                picked_at: approvedAt
+              });
+
+            if (pickError) throw pickError;
+          }
         }
       }
 
@@ -691,19 +792,35 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentUser) return;
 
     try {
+      let isCollectionFallback = false;
       const { error: submissionError } = await supabase
         .from('worship_submissions')
         .update({ status: 'rejected' })
         .eq('id', submissionId);
 
-      if (submissionError) throw submissionError;
+      if (submissionError) {
+        if (isMissingTableError(submissionError, 'worship_submissions')) {
+          isCollectionFallback = true;
+        } else {
+          throw submissionError;
+        }
+      }
 
-      const { error: collectionError } = await supabase
-        .from('worship_collections')
-        .update({ status: 'rejected' })
-        .eq('submission_id', submissionId);
+      if (isCollectionFallback) {
+        const { error: collectionError } = await supabase
+          .from('worship_collections')
+          .update({ status: 'rejected' })
+          .eq('id', submissionId);
 
-      if (collectionError) throw collectionError;
+        if (collectionError) throw collectionError;
+      } else {
+        const { error: collectionError } = await supabase
+          .from('worship_collections')
+          .update({ status: 'rejected' })
+          .eq('submission_id', submissionId);
+
+        if (collectionError) throw collectionError;
+      }
 
       await get().fetchWorshipSubmissions();
       await get().fetchSongs();

@@ -26,13 +26,13 @@ CREATE POLICY "Admins can update worship submissions" ON public.worship_submissi
 
 -- Add submission_id to worship_collections to link songs to submission batch
 ALTER TABLE public.worship_collections 
-ADD COLUMN submission_id UUID REFERENCES public.worship_submissions(id) ON DELETE CASCADE;
+ADD COLUMN IF NOT EXISTS submission_id UUID REFERENCES public.worship_submissions(id) ON DELETE CASCADE;
 
 -- Create index for efficient queries
-CREATE INDEX idx_worship_collections_submission_id 
+CREATE INDEX IF NOT EXISTS idx_worship_collections_submission_id 
 ON public.worship_collections(submission_id);
 
-CREATE INDEX idx_worship_submissions_status 
+CREATE INDEX IF NOT EXISTS idx_worship_submissions_status 
 ON public.worship_submissions(status);
 
 CREATE INDEX idx_worship_submissions_user_id 
