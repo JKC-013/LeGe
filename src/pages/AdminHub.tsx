@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { Users, FileCheck, Database, Search, Check, X, Trash2, Edit, Upload, Loader2, KeyRound, FileText, CheckCircle2, Eye, ExternalLink, Heart } from 'lucide-react';
@@ -326,21 +327,28 @@ export function AdminHub() {
                         )}
 
                         {submissionSongs.map(song => (
-                          <button
+                          <Link
                             key={song!.id}
-                            onClick={() => window.open(`/song/${song!.id}`, '_blank')}
+                            to={`/song/${song!.id}`}
                             className="block w-full text-left p-3 bg-surface-container rounded hover:bg-surface-container-high transition-colors group"
                           >
                             <p className="font-medium text-on-surface group-hover:text-primary transition-colors">{song!.title}</p>
                             <p className="text-sm text-on-surface-variant">{song!.author} • {song!.category}</p>
-                          </button>
+                          </Link>
                         ))}
                       </div>
 
                       {isPending && (
                         <div className="flex gap-2">
                           <button
-                            onClick={async () => { setProcessingId(submission.id); await approveWorshipSubmission(submission.id); setProcessingId(null); }}
+                            onClick={async () => {
+                              setProcessingId(submission.id);
+                              try {
+                                await approveWorshipSubmission(submission.id);
+                              } finally {
+                                setProcessingId(null);
+                              }
+                            }}
                             disabled={processingId === submission.id}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -348,7 +356,14 @@ export function AdminHub() {
                             {t('admin.approve')}
                           </button>
                           <button
-                            onClick={async () => { setProcessingId(submission.id); await declineWorshipSubmission(submission.id); setProcessingId(null); }}
+                            onClick={async () => {
+                              setProcessingId(submission.id);
+                              try {
+                                await declineWorshipSubmission(submission.id);
+                              } finally {
+                                setProcessingId(null);
+                              }
+                            }}
                             disabled={processingId === submission.id}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-bold rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
