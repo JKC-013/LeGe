@@ -632,8 +632,10 @@ export const useStore = create<AppState>((set, get) => ({
         .select('*')
         .order('submitted_at', { ascending: false });
 
-      // Admins see all, users see their own
-      if (currentUser?.role !== 'admin') {
+      // Admins see only pending requests; users see their own records
+      if (currentUser?.role === 'admin') {
+        submissionsQuery = submissionsQuery.eq('status', 'pending');
+      } else {
         submissionsQuery = submissionsQuery.eq('user_id', currentUser?.id || '');
       }
 
@@ -646,7 +648,9 @@ export const useStore = create<AppState>((set, get) => ({
             .select('id,user_id,song_id,status,submitted_at,approved_at')
             .order('submitted_at', { ascending: false });
 
-          if (currentUser?.role !== 'admin') {
+          if (currentUser?.role === 'admin') {
+            collectionQuery = collectionQuery.eq('status', 'pending');
+          } else {
             collectionQuery = collectionQuery.eq('user_id', currentUser?.id || '');
           }
 
@@ -739,13 +743,6 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       if (isCollectionFallback) {
-        const { error: collectionError } = await supabase
-          .from('worship_collections')
-          .delete()
-          .eq('id', submissionId);
-
-        if (collectionError) throw collectionError;
-
         const { data: songRow, error: songRowError } = await supabase
           .from('worship_collections')
           .select('song_id, user_id')
@@ -768,6 +765,13 @@ export const useStore = create<AppState>((set, get) => ({
 
           if (pickError) throw pickError;
         }
+
+        const { error: collectionError } = await supabase
+          .from('worship_collections')
+          .delete()
+          .eq('id', submissionId);
+
+        if (collectionError) throw collectionError;
 
         // Insert notification for approval
         if (submissionUserId) {
@@ -888,17 +892,9 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       if (isCollectionFallback) {
-        const { error: collectionError } = await supabase
-          .from('worship_collections')
-          .delete()
-          .eq('id', submissionId);
-
-        if (collectionError) throw collectionError;
-
-        // Get user_id from collection for fallback
         const { data: collectionData, error: collectionFetchError } = await supabase
           .from('worship_collections')
-          .select('user_id')
+          .select('song_id, user_id')
           .eq('id', submissionId)
           .single();
 
@@ -906,16 +902,27 @@ export const useStore = create<AppState>((set, get) => ({
           submissionUserId = collectionData.user_id;
         }
 
+        const { error: collectionError } = await supabase
+          .from('worship_collections')
+          .delete()
+          .eq('id', submissionId);
+
+        if (collectionError) throw collectionError;
+
         // Insert notification for rejection
         if (submissionUserId) {
+          const songIds = collectionData?.song_id ? [collectionData.song_id] : [];
+          const songTitles = songIds.map(id => get().songs.find(s => s.id === id)?.title).filter(Boolean);
           const { error: notificationError } = await supabase
             .from('notifications')
             .insert({
               user_id: submissionUserId,
               type: 'worship_rejected',
               title: 'Worship Submission Rejected',
-              message: submissionMessage || 'Your worship submission has been rejected.',
-              data: { submissionId, status: 'rejected' },
+              message: songTitles.length > 0 
+                ? `Your submission for "${songTitles.join(', ')}" has been rejected.`
+                : submissionMessage || 'Your worship submission has been rejected.',
+              data: { submissionId, songIds, status: 'rejected' },
               read: false
             });
 

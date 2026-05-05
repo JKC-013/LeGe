@@ -49,6 +49,7 @@ export function AdminHub() {
     (s.title.toLowerCase().includes(scoreSearch.toLowerCase()) || 
      s.author.toLowerCase().includes(scoreSearch.toLowerCase()))
   );
+  const pendingWorshipSubmissions = worshipSubmissions.filter(s => s.status === 'pending');
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -103,8 +104,8 @@ export function AdminHub() {
         >
           <Heart className="w-4 h-4" />
           <span className="hidden sm:inline">{t('admin.sundayWorship')}</span>
-          {worshipSubmissions.filter(s => s.status === 'pending').length > 0 && (
-            <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{worshipSubmissions.filter(s => s.status === 'pending').length}</span>
+          {pendingWorshipSubmissions.length > 0 && (
+            <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{pendingWorshipSubmissions.length}</span>
           )}
         </button>
       </div>
@@ -302,11 +303,11 @@ export function AdminHub() {
 
         {activeTab === 'worship' && (
           <div className="p-6">
-            {worshipSubmissions.length === 0 ? (
-              <div className="text-center py-12 text-outline-variant text-lg">{t('admin.noWorshipSubmissions')}</div>
+            {pendingWorshipSubmissions.length === 0 ? (
+              <div className="text-center py-12 text-outline-variant text-lg">{t('admin.noPendingWorshipRequests')}</div>
             ) : (
               <div className="space-y-4">
-                {worshipSubmissions.map(submission => {
+                {pendingWorshipSubmissions.map(submission => {
                   const submissionSongs = submission.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
                   const isPending = submission.status === 'pending';
                   
