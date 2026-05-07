@@ -820,8 +820,12 @@ export const useStore = create<AppState>((set, get) => ({
             read: false
           });
 
-        if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
-          console.warn('[WARN] Could not insert approval notification:', notificationError);
+        if (notificationError) {
+          if (isMissingTableError(notificationError, 'notifications')) {
+            console.error('[CRITICAL] Notifications table missing. Approval notification could not be saved.');
+          } else {
+            console.warn('[WARN] Could not insert approval notification:', notificationError);
+          }
         }
       }
 
@@ -936,8 +940,12 @@ export const useStore = create<AppState>((set, get) => ({
             read: false
           });
 
-        if (notificationError && !isMissingTableError(notificationError, 'notifications')) {
-          console.warn('[WARN] Could not insert rejection notification:', notificationError);
+        if (notificationError) {
+          if (isMissingTableError(notificationError, 'notifications')) {
+            console.error('[CRITICAL] Notifications table missing. Rejection notification could not be saved.');
+          } else {
+            console.warn('[WARN] Could not insert rejection notification:', notificationError);
+          }
         }
       }
 
@@ -1058,6 +1066,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (error) {
         if (isMissingTableError(error, 'notifications')) {
+          console.error('[CRITICAL] Notifications table missing. Create public.notifications in Supabase to enable inbox messages.');
           set({ notifications: [] });
           return;
         }
