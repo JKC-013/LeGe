@@ -5,11 +5,10 @@ import { useStore } from '../store';
 import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X, ShoppingCart, Mail } from 'lucide-react';
 import { AuthModal } from './AuthModal';
 import { CartModal } from './CartModal';
-import { NotificationToast } from './NotificationToast';
 
 export function Layout() {
   const { t, i18n } = useTranslation();
-  const { currentUser, logout, cartItems, notifications, clearAllNotifications, markNotificationAsRead, fetchNotifications } = useStore();
+  const { currentUser, logout, cartItems, notifications, clearAllNotifications, markNotificationAsRead, fetchNotifications, songs } = useStore();
   const navigate = useNavigate();
   const [langOpen, setLangOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -207,8 +206,20 @@ export function Layout() {
                             <div key={notification.id} className={`rounded-3xl border p-4 transition-colors ${notification.read ? 'border-outline-variant/15 bg-surface-container' : 'border-primary/20 bg-primary/5'}`}>
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-on-surface truncate">{notification.title}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-semibold text-on-surface truncate">{notification.data?.requestMessage || notification.title}</p>
+                                    {notification.data?.status && (
+                                      <span className="rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant">
+                                        {notification.data.status === 'approved' ? t('notifications.statusApproved') : notification.data.status === 'rejected' ? t('notifications.statusRejected') : notification.data.status}
+                                      </span>
+                                    )}
+                                  </div>
                                   <p className="mt-1 text-xs text-on-surface-variant leading-5">{notification.message}</p>
+                                  {notification.data?.songIds && notification.data.songIds.length > 0 && (
+                                    <p className="mt-2 text-xs text-on-surface-variant">
+                                      {t('notifications.songsLabel')} {notification.data.songIds.map((id: string) => songs.find(s => s.id === id)?.title).filter(Boolean).join(', ')}
+                                    </p>
+                                  )}
                                 </div>
                                 {!notification.read && (
                                   <button
@@ -285,7 +296,6 @@ export function Layout() {
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
       <CartModal isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
-      <NotificationToast />
     </div>
   );
 }

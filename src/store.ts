@@ -816,7 +816,7 @@ export const useStore = create<AppState>((set, get) => ({
             message: songTitles.length > 0
               ? `Your submission for "${songTitles.join(', ')}" has been approved and added to the worship list.`
               : submissionMessage || 'Your worship submission has been approved and added to the worship list.',
-            data: { submissionId, songIds, status: 'approved' },
+            data: { submissionId, songIds, status: 'approved', requestMessage: submissionMessage },
             read: false
           });
 
@@ -936,7 +936,7 @@ export const useStore = create<AppState>((set, get) => ({
             message: songTitles.length > 0
               ? `Your submission for "${songTitles.join(', ')}" has been rejected.`
               : submissionMessage || 'Your worship submission has been rejected.',
-            data: { submissionId, songIds, status: 'rejected' },
+            data: { submissionId, songIds, status: 'rejected', requestMessage: submissionMessage },
             read: false
           });
 
