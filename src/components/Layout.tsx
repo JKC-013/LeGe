@@ -2,21 +2,23 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
-import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X, ShoppingCart } from 'lucide-react';
+import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X, ShoppingCart, Mail } from 'lucide-react';
 import { AuthModal } from './AuthModal';
 import { CartModal } from './CartModal';
 import { NotificationToast } from './NotificationToast';
 
 export function Layout() {
   const { t, i18n } = useTranslation();
-  const { currentUser, logout, cartItems } = useStore();
+  const { currentUser, logout, cartItems, notifications, clearAllNotifications, markNotificationAsRead, fetchNotifications } = useStore();
   const navigate = useNavigate();
   const [langOpen, setLangOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const inboxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     document.documentElement.lang = i18n.language;
@@ -26,6 +28,9 @@ export function Layout() {
       }
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMobileMenuOpen(false);
+      }
+      if (inboxRef.current && !inboxRef.current.contains(event.target as Node)) {
+        setIsInboxOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -107,7 +112,7 @@ export function Layout() {
           </nav>
 
           {/* Actions */}
-          <div className="flex items-center space-x-2 sm:space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-4" ref={inboxRef}>
             {/* Mobile Menu Button */}
             <div className="relative md:hidden" ref={menuRef}>
               <button 
@@ -163,7 +168,83 @@ export function Layout() {
             </div>
             
             {currentUser ? (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 relative">
+                <button
+                  onClick={async () => {
+                    await fetchNotifications();
+                    setIsInboxOpen(prev => !prev);
+                  }}
+                  className="relative p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-full transition-all"
+                  title={t('layout.inbox')}
+                >
+                  <Mail className="w-5 h-5" />
+                  {notifications.filter(n => !n.read).length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[0.6rem] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                      {notifications.filter(n => !n.read).length}
+                    </span>
+                  )}
+                </button>
+
+                {isInboxOpen && (
+                  <div className="absolute right-0 top-full mt-3 w-[360px] max-h-[420px] overflow-hidden rounded-3xl border border-outline-variant/20 bg-surface shadow-ambient z-50">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/15 bg-surface-container-highest">
+                      <div>
+                        <p className="text-sm font-semibold text-on-surface">{t('layout.inbox')}</p>
+                        <p className="text-xs text-on-surface-variant">{t('layout.inboxSubtitle')}</p>
+                      </div>
+                      <button type="button" onClick={() => setIsInboxOpen(false)} className="p-2 rounded-full text-on-surface-variant hover:bg-surface-container transition-colors">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="p-3">
+                      {notifications.length === 0 ? (
+                        <div className="rounded-3xl border border-dashed border-outline-variant/30 p-6 text-center text-sm text-on-surface-variant">
+                          {t('layout.noNotifications')}
+                        </div>
+                      ) : (
+                        <div className="space-y-3 overflow-y-auto max-h-[300px] pr-1">
+                          {notifications.map(notification => (
+                            <div key={notification.id} className={`rounded-3xl border p-4 transition-colors ${notification.read ? 'border-outline-variant/15 bg-surface-container' : 'border-primary/20 bg-primary/5'}`}>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-on-surface truncate">{notification.title}</p>
+                                  <p className="mt-1 text-xs text-on-surface-variant leading-5">{notification.message}</p>
+                                </div>
+                                {!notification.read && (
+                                  <button
+                                    type="button"
+                                    onClick={() => markNotificationAsRead(notification.id)}
+                                    className="text-xs font-semibold text-primary hover:text-primary-container"
+                                  >
+                                    {t('notifications.markAsRead')}
+                                  </button>
+                                )}
+                              </div>
+                              <p className="mt-3 text-[11px] uppercase tracking-[0.15em] text-on-surface-variant">
+                                {new Date(notification.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {notifications.length > 0 && (
+                      <div className="border-t border-outline-variant/15 bg-surface-container-highest p-3 text-right">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await clearAllNotifications();
+                          }}
+                          className="inline-flex items-center gap-2 rounded-full bg-surface text-sm font-semibold text-on-surface hover:bg-surface-container px-3 py-2 transition-colors"
+                        >
+                          <Mail className="h-4 w-4" />
+                          {t('layout.clearAll')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Cart Button */}
                 <button 
                   onClick={() => setIsCartOpen(true)}
