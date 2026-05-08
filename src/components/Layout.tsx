@@ -15,6 +15,7 @@ export function Layout() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [clearStatus, setClearStatus] = useState<'idle' | 'cleared'>('idle');
   const langRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const inboxRef = useRef<HTMLDivElement>(null);
@@ -185,7 +186,7 @@ export function Layout() {
                 </button>
 
                 {isInboxOpen && (
-                  <div className="absolute right-0 top-full mt-3 w-[360px] max-h-[420px] overflow-hidden rounded-3xl border border-outline-variant/20 bg-surface shadow-ambient z-50">
+                  <div className="absolute right-0 top-full mt-3 w-[360px] max-h-[420px] overflow-hidden rounded-3xl border border-outline-variant/20 bg-surface shadow-ambient z-50 flex flex-col">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/15 bg-surface-container-highest">
                       <div>
                         <p className="text-sm font-semibold text-on-surface">{t('layout.inbox')}</p>
@@ -195,13 +196,13 @@ export function Layout() {
                         <X className="h-4 w-4" />
                       </button>
                     </div>
-                    <div className="p-3">
+                    <div className="p-3 flex-1 overflow-hidden">
                       {notifications.length === 0 ? (
-                        <div className="rounded-3xl border border-dashed border-outline-variant/30 p-6 text-center text-sm text-on-surface-variant">
+                        <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-outline-variant/30 p-6 text-center text-sm text-on-surface-variant">
                           {t('layout.noNotifications')}
                         </div>
                       ) : (
-                        <div className="space-y-3 overflow-y-auto max-h-[300px] pr-1">
+                        <div className="space-y-3 overflow-y-auto max-h-full pr-1">
                           {notifications.map(notification => (
                             <div key={notification.id} className="rounded-3xl border border-primary/20 bg-primary/5 p-4 transition-colors">
                               <div className="flex items-start justify-between gap-3">
@@ -230,16 +231,19 @@ export function Layout() {
                       )}
                     </div>
                     {notifications.length > 0 && (
-                      <div className="border-t border-outline-variant/15 bg-surface-container-highest p-3 text-right">
+                      <div className="mt-auto border-t border-outline-variant/15 bg-surface-container-highest p-3 text-right">
                         <button
                           type="button"
                           onClick={async () => {
                             await clearAllNotifications();
+                            await fetchNotifications();
+                            setClearStatus('cleared');
+                            window.setTimeout(() => setClearStatus('idle'), 2000);
                           }}
                           className="inline-flex items-center gap-2 rounded-full bg-surface text-sm font-semibold text-on-surface hover:bg-surface-container px-3 py-2 transition-colors"
                         >
                           <Mail className="h-4 w-4" />
-                          {t('layout.clearAll')}
+                          {clearStatus === 'cleared' ? t('layout.cleared') : t('layout.clearAll')}
                         </button>
                       </div>
                     )}
