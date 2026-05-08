@@ -8,7 +8,7 @@ import { CartModal } from './CartModal';
 
 export function Layout() {
   const { t, i18n } = useTranslation();
-  const { currentUser, logout, cartItems, notifications, clearAllNotifications, markNotificationAsRead, fetchNotifications, songs } = useStore();
+  const { currentUser, logout, cartItems, notifications, clearAllNotifications, fetchNotifications, songs } = useStore();
   const navigate = useNavigate();
   const [langOpen, setLangOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -177,9 +177,9 @@ export function Layout() {
                   title={t('layout.inbox')}
                 >
                   <Mail className="w-5 h-5" />
-                  {notifications.filter(n => !n.read).length > 0 && (
+                  {notifications.length > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[0.6rem] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                      {notifications.filter(n => !n.read).length}
+                      {notifications.length}
                     </span>
                   )}
                 </button>
@@ -203,7 +203,7 @@ export function Layout() {
                       ) : (
                         <div className="space-y-3 overflow-y-auto max-h-[300px] pr-1">
                           {notifications.map(notification => (
-                            <div key={notification.id} className={`rounded-3xl border p-4 transition-colors ${notification.read ? 'border-outline-variant/15 bg-surface-container' : 'border-primary/20 bg-primary/5'}`}>
+                            <div key={notification.id} className="rounded-3xl border border-primary/20 bg-primary/5 p-4 transition-colors">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2">
@@ -214,22 +214,12 @@ export function Layout() {
                                       </span>
                                     )}
                                   </div>
-                                  <p className="mt-1 text-xs text-on-surface-variant leading-5">{notification.message}</p>
                                   {notification.data?.songIds && notification.data.songIds.length > 0 && (
                                     <p className="mt-2 text-xs text-on-surface-variant">
                                       {t('notifications.songsLabel')} {notification.data.songIds.map((id: string) => songs.find(s => s.id === id)?.title).filter(Boolean).join(', ')}
                                     </p>
                                   )}
                                 </div>
-                                {!notification.read && (
-                                  <button
-                                    type="button"
-                                    onClick={() => markNotificationAsRead(notification.id)}
-                                    className="text-xs font-semibold text-primary hover:text-primary-container"
-                                  >
-                                    {t('notifications.markAsRead')}
-                                  </button>
-                                )}
                               </div>
                               <p className="mt-3 text-[11px] uppercase tracking-[0.15em] text-on-surface-variant">
                                 {new Date(notification.createdAt).toLocaleString()}

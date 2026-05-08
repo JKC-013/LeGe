@@ -95,9 +95,9 @@ interface AppState {
   getPickCount: (songId: string) => number;
   // Notification methods
   fetchNotifications: () => Promise<void>;
-  markNotificationAsRead: (notificationId: string) => Promise<void>;
   deleteNotification: (notificationId: string) => Promise<void>;
   clearAllNotifications: () => Promise<void>;
+  trimNotifications: (userId: string, maxCount: number) => Promise<void>;
   // Notification count methods
   getPendingPublisherCount: () => number;
   getPendingWorshipCount: () => number;
@@ -826,6 +826,8 @@ export const useStore = create<AppState>((set, get) => ({
           } else {
             console.warn('[WARN] Could not insert approval notification:', notificationError);
           }
+        } else {
+          await get().trimNotifications(submissionUserId, 5);
         }
       }
 
@@ -946,6 +948,8 @@ export const useStore = create<AppState>((set, get) => ({
           } else {
             console.warn('[WARN] Could not insert rejection notification:', notificationError);
           }
+        } else {
+          await get().trimNotifications(submissionUserId, 5);
         }
       }
 
@@ -1127,6 +1131,39 @@ export const useStore = create<AppState>((set, get) => ({
       }));
     } catch (err: any) {
       console.error('[CRITICAL] Error deleting notification:', err);
+    }
+  },
+
+  trimNotifications: async (userId: string, maxCount: number) => {
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        if (isMissingTableError(error, 'notifications')) {
+          return;
+        }
+        throw error;
+      }
+
+      const notificationIds = (data || []).map((n: any) => n.id);
+      if (notificationIds.length <= maxCount) return;
+
+      const idsToKeep = notificationIds.slice(0, maxCount);
+      const { error: deleteError } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', userId)
+        .not('id', 'in', idsToKeep);
+
+      if (deleteError) throw deleteError;
+    } catch (err: any) {
+      console.error('[CRITICAL] Error trimming notifications:', err);
     }
   },
 
