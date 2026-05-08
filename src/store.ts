@@ -55,7 +55,6 @@ export interface Notification {
   title: string;
   message: string;
   data?: any;
-  read: boolean;
   createdAt: string;
 }
 
@@ -816,8 +815,7 @@ export const useStore = create<AppState>((set, get) => ({
             message: songTitles.length > 0
               ? `Your submission for "${songTitles.join(', ')}" has been approved and added to the worship list.`
               : submissionMessage || 'Your worship submission has been approved and added to the worship list.',
-            data: { submissionId, songIds, status: 'approved', requestMessage: submissionMessage },
-            read: false
+            data: { submissionId, songIds, status: 'approved', requestMessage: submissionMessage }
           });
 
         if (notificationError) {
@@ -938,8 +936,7 @@ export const useStore = create<AppState>((set, get) => ({
             message: songTitles.length > 0
               ? `Your submission for "${songTitles.join(', ')}" has been rejected.`
               : submissionMessage || 'Your worship submission has been rejected.',
-            data: { submissionId, songIds, status: 'rejected', requestMessage: submissionMessage },
-            read: false
+            data: { submissionId, songIds, status: 'rejected', requestMessage: submissionMessage }
           });
 
         if (notificationError) {
@@ -1084,34 +1081,12 @@ export const useStore = create<AppState>((set, get) => ({
         title: n.title,
         message: n.message,
         data: n.data,
-        read: n.read,
         createdAt: n.created_at
       }));
 
       set({ notifications: formattedNotifications });
     } catch (err: any) {
       console.error('[CRITICAL] Error fetching notifications:', err);
-    }
-  },
-
-  markNotificationAsRead: async (notificationId: string) => {
-    if (!isSupabaseConfigured) return;
-
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', notificationId);
-
-      if (error) throw error;
-
-      set(state => ({
-        notifications: state.notifications.map(n =>
-          n.id === notificationId ? { ...n, read: true } : n
-        )
-      }));
-    } catch (err: any) {
-      console.error('[CRITICAL] Error marking notification as read:', err);
     }
   },
 
