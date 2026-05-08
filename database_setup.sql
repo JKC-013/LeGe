@@ -129,6 +129,15 @@ BEGIN
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_policy
+    WHERE polname = 'Users can delete own notifications'
+      AND polrelid = 'public.notifications'::regclass
+  ) THEN
+    CREATE POLICY "Users can delete own notifications" ON public.notifications FOR DELETE
+      USING (auth.uid() = user_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policy
     WHERE polname = 'System can insert notifications'
       AND polrelid = 'public.notifications'::regclass
   ) THEN
@@ -140,6 +149,3 @@ $$;
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id 
 ON public.notifications(user_id);
-
-CREATE INDEX IF NOT EXISTS idx_notifications_read 
-ON public.notifications(read);
