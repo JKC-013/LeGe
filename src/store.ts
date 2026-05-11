@@ -40,6 +40,7 @@ export interface WorshipSubmission {
   submittedAt: string;
   approvedAt?: string;
   message?: string;
+  worshipDate?: string;
 }
 
 export interface SongPick {
@@ -746,11 +747,21 @@ export const useStore = create<AppState>((set, get) => ({
       let songIds: string[] = [];
       let isCollectionFallback = false;
 
-      const { data: submissionData, error: fetchError } = await supabase
+      let { data: submissionData, error: fetchError } = await supabase
         .from('worship_submissions')
         .select('user_id, message, worship_date')
         .eq('id', submissionId)
-        .single();
+        .maybeSingle();
+
+      if (fetchError && /worship_date/.test(fetchError.message || '')) {
+        const fallback = await supabase
+          .from('worship_submissions')
+          .select('user_id, message')
+          .eq('id', submissionId)
+          .maybeSingle();
+        submissionData = fallback.data;
+        fetchError = fallback.error;
+      }
 
       if (!fetchError && submissionData) {
         submissionUserId = submissionData.user_id;
@@ -883,11 +894,21 @@ export const useStore = create<AppState>((set, get) => ({
       let songIds: string[] = [];
       let isCollectionFallback = false;
 
-      const { data: submissionData, error: fetchError } = await supabase
+      let { data: submissionData, error: fetchError } = await supabase
         .from('worship_submissions')
         .select('user_id, message, worship_date')
         .eq('id', submissionId)
-        .single();
+        .maybeSingle();
+
+      if (fetchError && /worship_date/.test(fetchError.message || '')) {
+        const fallback = await supabase
+          .from('worship_submissions')
+          .select('user_id, message')
+          .eq('id', submissionId)
+          .maybeSingle();
+        submissionData = fallback.data;
+        fetchError = fallback.error;
+      }
 
       if (!fetchError && submissionData) {
         submissionUserId = submissionData.user_id;
