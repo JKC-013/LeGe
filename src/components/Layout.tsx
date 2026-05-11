@@ -37,6 +37,21 @@ export function Layout() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Periodically fetch notifications for real-time badge updates
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Fetch immediately on mount
+    fetchNotifications();
+
+    // Then fetch every 3 seconds
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [currentUser, fetchNotifications]);
+
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
     setLangOpen(false);
@@ -170,10 +185,7 @@ export function Layout() {
             {currentUser ? (
               <div className="flex items-center space-x-2 relative">
                 <button
-                  onClick={async () => {
-                    await fetchNotifications();
-                    setIsInboxOpen(prev => !prev);
-                  }}
+                  onClick={() => setIsInboxOpen(prev => !prev)}
                   className="relative p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-full transition-all"
                   title={t('layout.inbox')}
                 >

@@ -312,35 +312,52 @@ export function AdminHub() {
                   const isPending = submission.status === 'pending';
                   
                   return (
-                    <div key={submission.id} className={`border rounded-xl p-4 ${isPending ? 'border-primary/30 bg-primary/5' : 'border-outline-variant/15 bg-surface'}`}>
-                      <div className="mb-4">
-                        <p className="text-sm font-medium text-on-surface-variant">
+                    <div key={submission.id} className={`border rounded-xl overflow-hidden ${isPending ? 'border-primary/30 bg-primary/5' : 'border-outline-variant/15 bg-surface'}`}>
+                      {/* Part 1: Date & Message */}
+                      <div className="p-4 border-b border-outline-variant/15">
+                        <p className="text-sm font-medium text-on-surface-variant mb-4">
                           {submission.status === 'pending' ? 'Pending' : submission.status === 'approved' ? 'Approved' : 'Declined'} • {new Date(submission.submittedAt).toLocaleDateString()}
                         </p>
-                      </div>
-                      
-                      <div className="space-y-2 mb-4">
-                        {submission.message && (
-                          <div className="rounded-2xl bg-surface-container-high p-3 text-sm text-on-surface-variant">
-                            <p className="font-medium text-on-surface mb-1">{t('admin.submissionMessage')}</p>
-                            <p>{submission.message}</p>
+                        
+                        {submission.worshipDate && (
+                          <div className="rounded-lg bg-surface-container-high p-3 mb-3">
+                            <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">{t('cart.dateLabel')}</p>
+                            <p className="text-sm font-medium text-on-surface">{new Date(submission.worshipDate).toLocaleDateString()}</p>
                           </div>
                         )}
 
-                        {submissionSongs.map(song => (
-                          <Link
-                            key={song!.id}
-                            to={`/song/${song!.id}`}
-                            className="block w-full text-left p-3 bg-surface-container rounded hover:bg-surface-container-high transition-colors group"
-                          >
-                            <p className="font-medium text-on-surface group-hover:text-primary transition-colors">{song!.title}</p>
-                            <p className="text-sm text-on-surface-variant">{song!.author} • {song!.category}</p>
-                          </Link>
-                        ))}
+                        {submission.message && (
+                          <div className="rounded-lg bg-surface-container-high p-3">
+                            <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-1">{t('admin.submissionMessage')}</p>
+                            <p className="text-sm text-on-surface">{submission.message}</p>
+                          </div>
+                        )}
                       </div>
 
+                      {/* Part 2: Selected Songs */}
+                      <div className="p-4">
+                        <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide mb-3">{t('admin.selectedSongs')}</p>
+                        <div className="space-y-2">
+                          {submissionSongs.length === 0 ? (
+                            <p className="text-sm text-on-surface-variant italic">{t('admin.noSongs')}</p>
+                          ) : (
+                            submissionSongs.map(song => (
+                              <Link
+                                key={song!.id}
+                                to={`/song/${song!.id}`}
+                                className="block w-full text-left p-3 bg-surface-container rounded hover:bg-surface-container-high transition-colors group border border-outline-variant/15"
+                              >
+                                <p className="font-medium text-on-surface group-hover:text-primary transition-colors">{song!.title}</p>
+                                <p className="text-sm text-on-surface-variant">{song!.author} • {song!.category}</p>
+                              </Link>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
                       {isPending && (
-                        <div className="flex gap-2">
+                        <div className="px-4 pb-4 flex gap-2 border-t border-outline-variant/15 pt-4">
                           <button
                             onClick={async () => {
                               setProcessingId(submission.id);
