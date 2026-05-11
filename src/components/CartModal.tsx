@@ -16,6 +16,7 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [message, setMessage] = useState('');
+  const [worshipDate, setWorshipDate] = useState('');
 
   const cartSongs = songs.filter(s => cartItems.includes(s.id));
 
@@ -28,17 +29,22 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
     setIsSubmitting(true);
     setSubmitError('');
     try {
-      await submitToWorship(cartItems, message);
+      console.log('[CART] Starting submission...');
+      await submitToWorship(cartItems, message, worshipDate);
+      console.log('[CART] Submission successful, clearing cart...');
       setSubmitSuccess(true);
       clearCart();
       setMessage('');
+      setWorshipDate('');
       setTimeout(() => {
         setSubmitSuccess(false);
         onClose();
       }, 2000);
     } catch (err: any) {
+      console.error('[CART] Submission error:', err);
       setSubmitError((err && (err.message || String(err))) || t('cart.submitError'));
     } finally {
+      console.log('[CART] Setting isSubmitting to false');
       setIsSubmitting(false);
     }
   };
@@ -103,6 +109,16 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
                   className="w-full min-h-[96px] p-3 bg-surface-container-highest border border-outline-variant/20 rounded-xl text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary"
                 />
                 <p className="text-xs text-on-surface-variant">{t('cart.messageHelp')}</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-on-surface">{t('cart.dateLabel')}</label>
+                <input
+                  type="date"
+                  value={worshipDate}
+                  onChange={(e) => setWorshipDate(e.target.value)}
+                  className="w-full p-3 bg-surface-container-highest border border-outline-variant/20 rounded-xl text-sm text-on-surface focus:outline-none focus:border-primary"
+                />
               </div>
             </div>
           )}

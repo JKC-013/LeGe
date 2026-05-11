@@ -206,9 +206,14 @@ export function Layout() {
                           {notifications.map(notification => (
                             <div key={notification.id} className="rounded-3xl border border-primary/20 bg-primary/5 p-4 transition-colors">
                               <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <p className="text-sm font-semibold text-on-surface truncate">{notification.data?.requestMessage || notification.title}</p>
+                                <div className="min-w-0 flex-1">
+                                  {notification.data?.worshipDate && (
+                                    <p className="text-xs font-medium text-primary mb-1">
+                                      {new Date(notification.data.worshipDate).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                  <p className="text-sm text-on-surface mb-2">{notification.data?.requestMessage || notification.message}</p>
+                                  <div className="flex items-center gap-2 mb-2">
                                     {notification.data?.status && (
                                       <span className="rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant">
                                         {notification.data.status === 'approved' ? t('notifications.statusApproved') : notification.data.status === 'rejected' ? t('notifications.statusRejected') : notification.data.status}
@@ -216,7 +221,7 @@ export function Layout() {
                                     )}
                                   </div>
                                   {notification.data?.songIds && notification.data.songIds.length > 0 && (
-                                    <p className="mt-2 text-xs text-on-surface-variant">
+                                    <p className="text-xs text-on-surface-variant">
                                       {t('notifications.songsLabel')} {notification.data.songIds.map((id: string) => songs.find(s => s.id === id)?.title).filter(Boolean).join(', ')}
                                     </p>
                                   )}

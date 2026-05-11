@@ -86,7 +86,7 @@ interface AppState {
   clearCart: () => void;
   isInCart: (songId: string) => boolean;
   // Worship submission methods (cart functionality)
-  submitToWorship: (songIds: string[], message?: string) => Promise<void>;
+  submitToWorship: (songIds: string[], message?: string, worshipDate?: string) => Promise<void>;
   fetchWorshipSubmissions: () => Promise<void>;
   approveWorshipSubmission: (submissionId: string) => Promise<void>;
   declineWorshipSubmission: (submissionId: string) => Promise<void>;
@@ -560,7 +560,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  submitToWorship: async (songIds: string[], message?: string) => {
+  submitToWorship: async (songIds: string[], message?: string, worshipDate?: string) => {
     if (!isSupabaseConfigured) return;
     const { currentUser } = get();
     if (!currentUser) return;
@@ -573,6 +573,7 @@ export const useStore = create<AppState>((set, get) => ({
           user_id: currentUser.id,
           status: 'pending',
           message: message || null,
+          worship_date: worshipDate || null,
           submitted_at: new Date().toISOString()
         })
         .select('id')
@@ -715,18 +716,20 @@ export const useStore = create<AppState>((set, get) => ({
 
       let submissionUserId: string | null = null;
       let submissionMessage: string | null = null;
+      let worshipDate: string | null = null;
       let songIds: string[] = [];
       let isCollectionFallback = false;
 
       const { data: submissionData, error: fetchError } = await supabase
         .from('worship_submissions')
-        .select('user_id, message')
+        .select('user_id, message, worship_date')
         .eq('id', submissionId)
         .single();
 
       if (!fetchError && submissionData) {
         submissionUserId = submissionData.user_id;
         submissionMessage = submissionData.message;
+        worshipDate = submissionData.worship_date;
 
         const { data: collectionRows, error: collectionFetchError } = await supabase
           .from('worship_collections')
@@ -815,7 +818,7 @@ export const useStore = create<AppState>((set, get) => ({
             message: songTitles.length > 0
               ? `Your submission for "${songTitles.join(', ')}" has been approved and added to the worship list.`
               : submissionMessage || 'Your worship submission has been approved and added to the worship list.',
-            data: { submissionId, songIds, status: 'approved', requestMessage: submissionMessage }
+            data: { submissionId, songIds, status: 'approved', requestMessage: submissionMessage, worshipDate }
           });
 
         if (notificationError) {
@@ -850,18 +853,20 @@ export const useStore = create<AppState>((set, get) => ({
       const declinedAt = new Date().toISOString();
       let submissionUserId: string | null = null;
       let submissionMessage: string | null = null;
+      let worshipDate: string | null = null;
       let songIds: string[] = [];
       let isCollectionFallback = false;
 
       const { data: submissionData, error: fetchError } = await supabase
         .from('worship_submissions')
-        .select('user_id, message')
+        .select('user_id, message, worship_date')
         .eq('id', submissionId)
         .single();
 
       if (!fetchError && submissionData) {
         submissionUserId = submissionData.user_id;
         submissionMessage = submissionData.message;
+        worshipDate = submissionData.worship_date;
 
         const { data: collectionRows, error: collectionFetchError } = await supabase
           .from('worship_collections')
@@ -936,7 +941,7 @@ export const useStore = create<AppState>((set, get) => ({
             message: songTitles.length > 0
               ? `Your submission for "${songTitles.join(', ')}" has been rejected.`
               : submissionMessage || 'Your worship submission has been rejected.',
-            data: { submissionId, songIds, status: 'rejected', requestMessage: submissionMessage }
+            data: { submissionId, songIds, status: 'rejected', requestMessage: submissionMessage, worshipDate }
           });
 
         if (notificationError) {
@@ -1148,13 +1153,16 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentUser) return;
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('notifications')
         .delete()
         .eq('user_id', currentUser.id);
 
-      if (error) throw error;
-
+      if (error) {
+        console.error('[CRITICAL] Error clearing all notifications:', error);
+        return;
+      }
+      console.log('[INFO] clearAllNotifications deleted notifications:', data?.length);
       set({ notifications: [] });
     } catch (err: any) {
       console.error('[CRITICAL] Error clearing all notifications:', err);

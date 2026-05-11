@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS public.worship_submissions (
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   status content_status DEFAULT 'pending'::content_status NOT NULL,
   message TEXT,
+  worship_date DATE,
   submitted_at TIMESTAMPTZ DEFAULT NOW(),
   approved_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
   approved_at TIMESTAMPTZ,
