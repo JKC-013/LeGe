@@ -567,17 +567,43 @@ export const useStore = create<AppState>((set, get) => ({
 
     try {
       // Step 1: Create worship_submission batch record
-      const { data: submissionData, error: submissionError } = await supabase
+      const payload: Record<string, any> = {
+        user_id: currentUser.id,
+        status: 'pending',
+        message: message || null,
+        submitted_at: new Date().toISOString()
+      };
+      if (worshipDate) {
+        payload.worship_date = worshipDate;
+      }
+
+      let submissionResponse = await supabase
         .from('worship_submissions')
-        .insert({
-          user_id: currentUser.id,
-          status: 'pending',
-          message: message || null,
-          worship_date: worshipDate || null,
-          submitted_at: new Date().toISOString()
-        })
+        .insert(payload)
         .select('id')
         .single();
+
+      let submissionData = submissionResponse.data;
+      let submissionError = submissionResponse.error;
+
+      if (submissionError && /worship_date/.test(submissionError.message || '')) {
+        console.warn('[CRITICAL] worship_date column missing, retrying without the date column.');
+        delete payload.worship_date;
+        if (worshipDate) {
+          payload.message = message
+            ? `${message} (${worshipDate})`
+            : `Worship date: ${worshipDate}`;
+        }
+
+        submissionResponse = await supabase
+          .from('worship_submissions')
+          .insert(payload)
+          .select('id')
+          .single();
+
+        submissionData = submissionResponse.data;
+        submissionError = submissionResponse.error;
+      }
 
       if (submissionError) {
         if (isMissingTableError(submissionError, 'worship_submissions')) {

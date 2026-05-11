@@ -14,6 +14,7 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
   const { cartItems, songs, removeFromCart, clearCart, submitToWorship } = useStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [dateError, setDateError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [message, setMessage] = useState('');
   const [worshipDate, setWorshipDate] = useState('');
@@ -26,8 +27,14 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
       return;
     }
 
+    if (!worshipDate) {
+      setDateError(t('cart.dateRequired'));
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError('');
+    setDateError('');
     try {
       console.log('[CART] Starting submission...');
       await submitToWorship(cartItems, message, worshipDate);
@@ -115,10 +122,14 @@ export function CartModal({ isOpen, onClose }: CartModalProps) {
                 <label className="block text-sm font-medium text-on-surface">{t('cart.dateLabel')}</label>
                 <input
                   type="date"
+                  required
                   value={worshipDate}
                   onChange={(e) => setWorshipDate(e.target.value)}
                   className="w-full p-3 bg-surface-container-highest border border-outline-variant/20 rounded-xl text-sm text-on-surface focus:outline-none focus:border-primary"
                 />
+                {dateError && (
+                  <p className="text-xs text-red-600">{dateError}</p>
+                )}
               </div>
             </div>
           )}
