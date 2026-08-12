@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useStore } from '../store';
-import { Music, Star } from 'lucide-react';
+import { Music, Star, ArrowLeft } from 'lucide-react';
 
 export function Favourites() {
   const { t } = useTranslation();
@@ -16,6 +16,10 @@ export function Favourites() {
 
   return (
     <div className="space-y-8">
+      <Link to="/songs" className="inline-flex items-center text-sm text-on-surface-variant hover:text-primary transition-colors font-medium">
+        <ArrowLeft className="w-4 h-4 mr-1" />
+        {t('song.back') || 'Back'}
+      </Link>
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-display font-bold text-on-surface">{t('nav.favourites')}</h1>
       </div>
@@ -31,8 +35,8 @@ export function Favourites() {
             </button>
             <Link to={`/song/${song.id}`}>
               <div className="aspect-[3/4] bg-surface-container-lowest rounded-2xl overflow-hidden relative shadow-ambient group-hover:-translate-y-1 transition-all duration-300">
-                {song.previewUrl ? (
-                  <img src={song.previewUrl} alt={song.title} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" />
+                {song.thumbnailUrl ? (
+                  <img src={song.thumbnailUrl} alt={song.title} className="w-full h-full object-cover" />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-outline-variant">
                     <Music className="w-12 h-12 opacity-20" />
@@ -42,7 +46,7 @@ export function Favourites() {
               <div className="space-y-1 px-2 mt-3">
                 <h3 className="text-lg font-bold text-on-surface line-clamp-1">{song.title}</h3>
                 <div className="flex items-center justify-between text-sm text-on-surface-variant">
-                  <span className="truncate pr-2">{song.author}</span>
+                  <span className="truncate pr-2">{song.organization}</span>
                   <span className="bg-surface-container px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase shrink-0">{song.category}</span>
                 </div>
               </div>

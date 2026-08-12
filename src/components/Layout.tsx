@@ -2,23 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
-import { Globe, LogOut, User as UserIcon, ChevronDown, Menu, X, ShoppingCart, Mail } from 'lucide-react';
+import { Globe, LogOut, User as UserIcon, ChevronDown, Star, Mic, Mail } from 'lucide-react';
+import { ChristianCross } from './ChristianCross';
 import { AuthModal } from './AuthModal';
-import { CartModal } from './CartModal';
 
 export function Layout() {
   const { t, i18n } = useTranslation();
-  const { currentUser, logout, cartItems, notifications, clearAllNotifications, fetchNotifications, songs } = useStore();
+  const { currentUser, logout } = useStore();
   const navigate = useNavigate();
+  const requestQueue = useStore(state => state.requestQueue);
+  const pendingSongsCount = useStore(state => state.songs.filter(s => s.status === 'pending').length);
   const [langOpen, setLangOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isInboxOpen, setIsInboxOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [clearStatus, setClearStatus] = useState<'idle' | 'cleared'>('idle');
   const langRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const inboxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     document.documentElement.lang = i18n.language;
@@ -26,31 +22,10 @@ export function Layout() {
       if (langRef.current && !langRef.current.contains(event.target as Node)) {
         setLangOpen(false);
       }
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMobileMenuOpen(false);
-      }
-      if (inboxRef.current && !inboxRef.current.contains(event.target as Node)) {
-        setIsInboxOpen(false);
-      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  // Periodically fetch notifications for real-time badge updates
-  useEffect(() => {
-    if (!currentUser) return;
-
-    // Fetch immediately on mount
-    fetchNotifications();
-
-    // Then fetch every 3 seconds
-    const interval = setInterval(() => {
-      fetchNotifications();
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [currentUser, fetchNotifications]);
 
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
@@ -105,62 +80,25 @@ export function Layout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-3 group">
             <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary-container rounded-xl flex items-center justify-center text-on-primary font-display font-bold text-xl shadow-ambient group-hover:scale-105 transition-transform">
-              L
+              <ChristianCross className="w-6 h-6" />
             </div>
-            <span className="text-xl font-display font-bold tracking-tight text-on-surface hidden sm:inline">
-              Lege's Music
+            <span className="text-xl font-display font-bold tracking-tight text-on-surface">
+              梁如學宣道會音樂事工
             </span>
           </Link>
           
-          {/* Desktop Navigation */}
           <nav className="hidden md:flex space-x-2">
-            <Link to="/" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.home')}</Link>
-            {currentUser && (
-              <Link to="/favourites" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.favourites')}</Link>
-            )}
-            {(currentUser?.role === 'publisher' || currentUser?.role === 'admin') && (
-              <Link to="/publisher" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.publisher')}</Link>
-            )}
-            {currentUser?.role === 'admin' && (
-              <Link to="/admin" className="text-on-surface-variant hover:text-primary hover:bg-surface-container px-4 py-2 rounded-full font-medium transition-all text-sm">{t('nav.admin')}</Link>
-            )}
+            {/* The main navigation is handled by icons now per requirements */}
           </nav>
 
-          {/* Actions */}
-          <div className="flex items-center space-x-2 sm:space-x-4" ref={inboxRef}>
-            {/* Mobile Menu Button */}
-            <div className="relative md:hidden" ref={menuRef}>
-              <button 
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-full transition-all"
-              >
-                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-              </button>
-              
-              {mobileMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-surface-container-lowest rounded-xl shadow-ambient border border-outline-variant/15 py-2 z-20 overflow-hidden">
-                  <Link to="/" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.home')}</Link>
-                  {currentUser && (
-                    <Link to="/favourites" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.favourites')}</Link>
-                  )}
-                  {(currentUser?.role === 'publisher' || currentUser?.role === 'admin') && (
-                    <Link to="/publisher" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.publisher')}</Link>
-                  )}
-                  {currentUser?.role === 'admin' && (
-                    <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all">{t('nav.admin')}</Link>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Language Selector */}
+          <div className="flex items-center space-x-4">
             <div className="relative" ref={langRef}>
               <button 
                 onClick={() => setLangOpen(!langOpen)} 
-                className="flex items-center space-x-1 text-on-surface-variant hover:text-primary hover:bg-surface-container px-2 sm:px-3 py-2 rounded-full transition-all text-sm"
+                className="flex items-center space-x-1 text-on-surface-variant hover:text-primary hover:bg-surface-container px-3 py-2 rounded-full transition-all"
               >
                 <Globe className="w-5 h-5" />
-                <span className="hidden sm:inline font-medium uppercase">{i18n.language}</span>
+                <span className="text-sm font-medium uppercase">{i18n.language}</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
               
@@ -183,110 +121,54 @@ export function Layout() {
             </div>
             
             {currentUser ? (
-              <div className="flex items-center space-x-2 relative">
-                <button
-                  onClick={() => setIsInboxOpen(prev => !prev)}
-                  className="relative p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-full transition-all"
-                  title={t('layout.inbox')}
-                >
+              <div className="flex items-center space-x-2">
+                <Link to="/favourites" className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all" title={t('nav.favourites')}>
+                  <Star className="w-5 h-5" />
+                </Link>
+                <Link to="/requests" className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all relative" title={t('nav.requests')}>
+                  <Mic className="w-5 h-5" />
+                  {requestQueue.length > 0 && (
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-error rounded-full"></span>
+                  )}
+                </Link>
+                <Link to="/notifications" className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all relative" title={t('nav.notifications')}>
                   <Mail className="w-5 h-5" />
-                  {notifications.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[0.6rem] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                      {notifications.length}
-                    </span>
+                  {currentUser?.role === 'admin' && pendingSongsCount > 0 && (
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-error rounded-full"></span>
                   )}
-                </button>
+                </Link>
 
-                {isInboxOpen && (
-                  <div className="absolute right-0 top-full mt-3 w-[360px] max-h-[420px] overflow-hidden rounded-3xl border border-outline-variant/20 bg-surface shadow-ambient z-50 flex flex-col">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/15 bg-surface-container-highest">
-                      <div>
-                        <p className="text-sm font-semibold text-on-surface">{t('layout.inbox')}</p>
-                        <p className="text-xs text-on-surface-variant">{t('layout.inboxSubtitle')}</p>
-                      </div>
-                      <button type="button" onClick={() => setIsInboxOpen(false)} className="p-2 rounded-full text-on-surface-variant hover:bg-surface-container transition-colors">
-                        <X className="h-4 w-4" />
-                      </button>
+                <div className="relative group ml-2">
+                  <button className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all flex items-center">
+                    <UserIcon className="w-5 h-5" />
+                  </button>
+                  <div className="absolute right-0 mt-2 w-48 bg-surface-container-lowest rounded-xl shadow-ambient border border-outline-variant/15 py-2 z-20 overflow-hidden hidden group-hover:block">
+                    <div className="px-4 py-2 border-b border-outline-variant/15 mb-1">
+                      <p className="text-sm font-medium text-on-surface truncate">{currentUser.name || currentUser.email}</p>
+                      <p className="text-xs text-on-surface-variant capitalize">{currentUser.role}</p>
                     </div>
-                    <div className="p-3 flex-1 overflow-hidden">
-                      {notifications.length === 0 ? (
-                        <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-outline-variant/30 p-6 text-center text-sm text-on-surface-variant">
-                          {t('layout.noNotifications')}
-                        </div>
-                      ) : (
-                        <div className="space-y-3 overflow-y-auto max-h-full pr-1">
-                          {notifications.map(notification => (
-                            <div key={notification.id} className="rounded-3xl border border-primary/20 bg-primary/5 p-4 transition-colors">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0 flex-1">
-                                  {notification.data?.worshipDate && (
-                                    <p className="text-xs font-medium text-primary mb-1">
-                                      {new Date(notification.data.worshipDate).toLocaleDateString()}
-                                    </p>
-                                  )}
-                                  <p className="text-sm text-on-surface mb-2">{notification.data?.requestMessage || notification.message}</p>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    {notification.data?.status && (
-                                      <span className="rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant">
-                                        {notification.data.status === 'approved' ? t('notifications.statusApproved') : notification.data.status === 'rejected' ? t('notifications.statusRejected') : notification.data.status}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {notification.data?.songIds && notification.data.songIds.length > 0 && (
-                                    <p className="text-xs text-on-surface-variant">
-                                      {t('notifications.songsLabel')} {notification.data.songIds.map((id: string) => songs.find(s => s.id === id)?.title).filter(Boolean).join(', ')}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                              <p className="mt-3 text-[11px] uppercase tracking-[0.15em] text-on-surface-variant">
-                                {new Date(notification.createdAt).toLocaleString()}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    {notifications.length > 0 && (
-                      <div className="mt-auto border-t border-outline-variant/15 bg-surface-container-highest p-3 text-right">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            await clearAllNotifications();
-                            await fetchNotifications();
-                            setClearStatus('cleared');
-                            window.setTimeout(() => setClearStatus('idle'), 2000);
-                          }}
-                          className="inline-flex items-center gap-2 rounded-full bg-surface text-sm font-semibold text-on-surface hover:bg-surface-container px-3 py-2 transition-colors"
-                        >
-                          <Mail className="h-4 w-4" />
-                          {clearStatus === 'cleared' ? t('layout.cleared') : t('layout.clearAll')}
-                        </button>
-                      </div>
+                    {currentUser.role === 'admin' && (
+                      <Link to="/admin" className="block px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
+                        {t('nav.admin')}
+                      </Link>
                     )}
+                    {(currentUser.role === 'collaborator' || currentUser.role === 'admin') && (
+                      <Link to="/publisher" className="block px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
+                        {t('nav.publisher')}
+                      </Link>
+                    )}
+                    <button 
+                      onClick={() => { logout(); navigate('/'); }} 
+                      className="w-full text-left flex items-center px-4 py-2 text-sm text-error hover:bg-error/10 transition-colors mt-1"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      {t('nav.logout')}
+                    </button>
                   </div>
-                )}
-
-                {/* Cart Button */}
-                <button 
-                  onClick={() => setIsCartOpen(true)}
-                  className="relative p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-full transition-all"
-                  title={t('nav.cart')}
-                >
-                  <ShoppingCart className="w-5 h-5" />
-                  {cartItems.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                      {cartItems.length}
-                    </span>
-                  )}
-                </button>
-                <span className="text-xs sm:text-sm font-medium text-on-surface-variant hidden sm:inline-block truncate max-w-[100px]">{currentUser.email}</span>
-                <button onClick={() => { logout(); navigate('/'); setMobileMenuOpen(false); }} className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2 rounded-full transition-all" title={t('nav.logout')}>
-                  <LogOut className="w-5 h-5" />
-                </button>
+                </div>
               </div>
             ) : (
-              <button onClick={handleLogin} className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-2 bg-primary text-on-primary rounded-full hover:bg-primary-container transition-colors text-xs sm:text-sm font-medium shadow-ambient">
+              <button onClick={handleLogin} className="flex items-center space-x-2 px-6 py-2.5 bg-primary text-on-primary rounded-full hover:bg-primary-container transition-colors text-sm font-medium shadow-ambient">
                 <UserIcon className="w-4 h-4" />
                 <span>{t('nav.login')}</span>
               </button>
@@ -301,12 +183,11 @@ export function Layout() {
       
       <footer className="border-t border-[#E5E0D8] py-8 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-[#8C9A94] text-sm">
-          &copy; {new Date().getFullYear()} Lege's Music. All rights reserved.
+          &copy; {new Date().getFullYear()} 梁如學宣道會音樂事工. All rights reserved.
         </div>
       </footer>
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
-      <CartModal isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
     </div>
   );
 }

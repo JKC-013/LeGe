@@ -7,10 +7,13 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
+import { SongsCatalog } from './pages/SongsCatalog';
 import { SongDetail } from './pages/SongDetail';
+import { ServiceRequests } from './pages/ServiceRequests';
 import { PublisherDashboard } from './pages/PublisherDashboard';
 import { AdminHub } from './pages/AdminHub';
 import { Favourites } from './pages/Favourites';
+import { Notifications } from './pages/Notifications';
 import { useStore } from './store';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
@@ -35,14 +38,25 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
+          <Route path="songs" element={<SongsCatalog />} />
           <Route path="song/:id" element={<SongDetail />} />
           <Route path="favourites" element={
-            <ProtectedRoute allowedRoles={['user', 'publisher', 'admin']}>
+            <ProtectedRoute allowedRoles={['user', 'pastor', 'collaborator', 'admin']}>
               <Favourites />
             </ProtectedRoute>
           } />
+          <Route path="requests" element={
+            <ProtectedRoute allowedRoles={['user', 'pastor', 'collaborator', 'admin']}>
+              <ServiceRequests />
+            </ProtectedRoute>
+          } />
+          <Route path="notifications" element={
+            <ProtectedRoute allowedRoles={['user', 'pastor', 'collaborator', 'admin']}>
+              <Notifications />
+            </ProtectedRoute>
+          } />
           <Route path="publisher" element={
-            <ProtectedRoute allowedRoles={['publisher', 'admin']}>
+            <ProtectedRoute allowedRoles={['collaborator', 'admin', 'publisher']}>
               <PublisherDashboard />
             </ProtectedRoute>
           } />

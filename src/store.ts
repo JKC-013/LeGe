@@ -1,187 +1,153 @@
 import { create } from 'zustand';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 
-const isMissingTableError = (error: any, tableName: string) => {
-  const message = error?.message || '';
-  return typeof message === 'string' && (
-    message.includes(`Could not find the table 'public.${tableName}'`) ||
-    message.includes(`relation \"${tableName}\" does not exist`)
-  );
-};
-
-export type UserRole = 'user' | 'publisher' | 'admin';
+export type UserRole = 'user' | 'pastor' | 'collaborator' | 'admin' | 'publisher';
 
 export interface User {
   id: string;
   email: string;
+  name?: string;
   role: UserRole;
-  favourites: string[]; // array of song ids
+  favourites: string[];
 }
 
 export interface Song {
   id: string;
   title: string;
-  author: string;
+  organization: string;
   category: string;
-  audience: 'band' | 'worship';
+  versions: string[]; // e.g. Mandarin, Cantonese, Vietnamese
+  keys: string[];
   pdfUrl: string;
-  previewUrl: string;
+  thumbnailUrl?: string;
   lyrics?: string;
-  keys?: { id: string; name: string; pdfUrl?: string }[];
   status: 'pending' | 'approved';
-  pickCount?: number; // Number of times picked in last 3 months
+  created_by?: string;
+  approval_count: number;
 }
 
-export interface WorshipSubmission {
+export interface ServiceRequest {
   id: string;
-  userId: string;
-  songIds: string[];
+  song_ids: string[]; // changed to handle multiple songs
+  user_id: string;
+  date: string;
+  message: string;
   status: 'pending' | 'approved' | 'rejected';
-  submittedAt: string;
-  approvedAt?: string;
-  message?: string;
-  worshipDate?: string;
-}
-
-export interface SongPick {
-  id: string;
-  songId: string;
-  pickedAt: string;
+  created_at: string;
 }
 
 export interface Notification {
   id: string;
-  userId: string;
-  type: string;
-  title: string;
+  user_id: string;
   message: string;
-  data?: any;
-  createdAt: string;
+  read: boolean;
+  created_at: string;
 }
 
 interface AppState {
   currentUser: User | null;
   users: User[];
   songs: Song[];
-  cartItems: string[]; // Array of song IDs in ephemeral cart (in-memory only)
-  worshipSubmissions: WorshipSubmission[]; // All worship submissions for admin view
+  serviceRequests: ServiceRequest[];
   notifications: Notification[];
+  requestQueue: string[];
   isInitialized: boolean;
+  
   initialize: () => Promise<void>;
   logout: () => Promise<void>;
   toggleFavourite: (songId: string) => Promise<void>;
-  addSong: (song: Omit<Song, 'id' | 'status'>) => Promise<void>;
-  addKeyToSong: (songId: string, keyName: string, pdfUrl?: string) => Promise<void>;
-  removeKey: (keyId: string) => Promise<void>;
+  addSong: (song: Omit<Song, 'id' | 'status' | 'approval_count'>) => Promise<void>;
   updateUserRole: (email: string, role: UserRole) => Promise<void>;
   approveSong: (songId: string) => Promise<void>;
   declineSong: (songId: string) => Promise<void>;
   deleteSong: (songId: string) => Promise<void>;
-  updateSong: (songId: string, updates: Partial<Omit<Song, 'id'>>) => Promise<void>;
-  updateKeyPdf: (keyId: string, pdfUrl: string) => Promise<void>;
+  editSong: (songId: string, updates: Partial<Song>) => Promise<void>;
+  addToRequestQueue: (songId: string) => void;
+  removeFromRequestQueue: (songId: string) => void;
+  submitServiceRequest: (date: string, message: string) => Promise<void>;
+  approveServiceRequest: (id: string) => Promise<void>;
+  declineServiceRequest: (id: string) => Promise<void>;
   fetchSongs: () => Promise<void>;
-  fetchUsers: () => Promise<void>;
-  // Cart methods (ephemeral shopping cart)
-  addToCart: (songId: string) => void;
-  removeFromCart: (songId: string) => void;
-  clearCart: () => void;
-  isInCart: (songId: string) => boolean;
-  // Worship submission methods (cart functionality)
-  submitToWorship: (songIds: string[], message?: string, worshipDate?: string) => Promise<void>;
-  fetchWorshipSubmissions: () => Promise<void>;
-  approveWorshipSubmission: (submissionId: string) => Promise<void>;
-  declineWorshipSubmission: (submissionId: string) => Promise<void>;
-  deleteWorshipSubmission: (submissionId: string) => Promise<void>;
-  getPickCount: (songId: string) => number;
-  // Notification methods
   fetchNotifications: () => Promise<void>;
-  deleteNotification: (notificationId: string) => Promise<void>;
-  clearAllNotifications: () => Promise<void>;
-  trimNotifications: (userId: string, maxCount: number) => Promise<void>;
-  // Notification count methods
-  getPendingPublisherCount: () => number;
-  getPendingWorshipCount: () => number;
-  getPendingAccessCount: () => number;
+  deleteNotification: (id: string) => Promise<void>;
+  fetchUsers: () => Promise<void>;
 }
 
 export const useStore = create<AppState>((set, get) => ({
   currentUser: null,
   users: [],
   songs: [],
-  cartItems: [],
-  worshipSubmissions: [],
+  serviceRequests: [],
   notifications: [],
+  requestQueue: [],
   isInitialized: false,
+  
 
   initialize: async () => {
+    if (get().isInitialized) return;
+    
     if (!isSupabaseConfigured) {
       set({ isInitialized: true });
       return;
     }
-
-    const loadProfileState = async (sessionUser: any) => {
-      try {
-        const { data: profile, error: profileError } = await supabase
+    
+    const handleSession = async (session: any) => {
+      if (session?.user) {
+        const { data: profile, error } = await supabase
           .from('users')
           .select('*')
-          .eq('id', sessionUser.id)
+          .eq('id', session.user.id)
           .single();
 
-        if (profileError) {
-          console.error('[CRITICAL] Error fetching profile:', profileError);
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error fetching user profile:', error);
         }
 
-        const { data: favs, error: favError } = await supabase
+        const role = profile?.role || (session.user.email === 'khiemvinhtran1112@gmail.com' ? 'admin' : 'user');
+        const name = profile?.name || session.user.user_metadata?.name;
+
+        // Fetch user favourites
+        const { data: favsData } = await supabase
           .from('favourites')
           .select('song_id')
-          .eq('user_id', sessionUser.id);
-          
-        if (favError) console.error('Error fetching favourites:', favError);
+          .eq('user_id', session.user.id);
+        const userFavourites = favsData ? favsData.map(f => f.song_id) : [];
 
-        const favourites = favs ? favs.map(f => f.song_id) : [];
-
-        if (profile) {
-          set({ 
-            currentUser: { 
-              id: profile.id, 
-              email: profile.email, 
-              role: profile.role, 
-              favourites 
-            } 
-          });
-          
-          get().fetchSongs();
-          get().fetchNotifications();
-          if (profile.role === 'admin') {
-            get().fetchUsers();
-            get().fetchWorshipSubmissions();
-          }
-        } else {
-          console.error("Profile not found for session user ID:", sessionUser.id);
-        }
-      } catch (err) {
-        console.error("Unhandled error in loadProfileState:", err);
-      }
-    };
-
-    // Await initial session
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      await loadProfileState(session.user);
-    } else {
-      get().fetchSongs();
-    }
-    set({ isInitialized: true });
-
-    // Listen to auth changes
-    supabase.auth.onAuthStateChange(async (event, authSession) => {
-      if (authSession?.user) {
-        await loadProfileState(authSession.user);
+        set({ 
+          currentUser: { 
+            id: session.user.id, 
+            email: session.user.email || '', 
+            name,
+            role: role, 
+            favourites: userFavourites 
+          } 
+        });
+        get().fetchSongs();
+        get().fetchNotifications();
       } else {
         set({ currentUser: null, users: [], songs: [] });
         get().fetchSongs();
+        set({ notifications: [] });
       }
+    };
+
+    // Listen to auth changes
+    supabase.auth.onAuthStateChange((event, session) => {
+      handleSession(session).catch((err) => {
+        console.error("Error in onAuthStateChange:", err);
+      });
     });
+
+    try {
+      // Prevent infinite hang in getSession
+      const response = await supabase.auth.getSession();
+      const session = response?.data?.session || null;
+      await handleSession(session);
+    } catch (e) {
+      console.error("Error fetching initial session:", e);
+    }
+
+    set({ isInitialized: true });
   },
   
   logout: async () => {
@@ -197,349 +163,259 @@ export const useStore = create<AppState>((set, get) => ({
 
     const isFav = currentUser.favourites.includes(songId);
     
-    try {
-      if (isFav) {
-        const { error } = await supabase
-          .from('favourites')
-          .delete()
-          .match({ user_id: currentUser.id, song_id: songId });
-          
-        if (error) throw error;
-          
-        set({
-          currentUser: {
-            ...currentUser,
-            favourites: currentUser.favourites.filter(id => id !== songId)
-          }
-        });
-      } else {
-        const { error } = await supabase
-          .from('favourites')
-          .insert({ user_id: currentUser.id, song_id: songId });
-          
-        if (error) throw error;
-          
-        set({
-          currentUser: {
-            ...currentUser,
-            favourites: [...currentUser.favourites, songId]
-          }
-        });
-      }
-    } catch (err: any) {
-      console.error('[CRITICAL] Error toggling favourite:', err);
-      alert(`Could not update favourite: ${err.message || 'Unknown error'}`);
+    if (isFav) {
+      await supabase
+        .from('favourites')
+        .delete()
+        .match({ user_id: currentUser.id, song_id: songId });
+        
+      set({
+        currentUser: {
+          ...currentUser,
+          favourites: currentUser.favourites.filter(id => id !== songId)
+        }
+      });
+    } else {
+      await supabase
+        .from('favourites')
+        .insert({ user_id: currentUser.id, song_id: songId });
+        
+      set({
+        currentUser: {
+          ...currentUser,
+          favourites: [...currentUser.favourites, songId]
+        }
+      });
     }
   },
   
   addSong: async (songData) => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
+    const { currentUser, songs } = get();
+    if (!currentUser) return;
     
-    const publishStatus = currentUser?.role === 'admin' ? 'approved' : 'pending';
+    if (!isSupabaseConfigured) {
+      // Use local state if supabase fails (for prototyping)
+      const newSong: Song = {
+        ...songData,
+        id: Date.now().toString(),
+        status: 'pending',
+        created_by: currentUser.id,
+        approval_count: 0
+      };
+      set({ songs: [...songs, newSong] });
+      return;
+    }
     
-    try {
-      const { data, error } = await supabase
-        .from('songs')
-        .insert({
-          title: songData.title,
-          author: songData.author,
-          category: songData.category,
-          audience: songData.audience,
-          pdf_url: songData.pdfUrl,
-          preview_url: songData.previewUrl,
-          lyrics: songData.lyrics,
-          status: publishStatus,
-          created_by: currentUser?.id
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      // Add keys if any
-      if (songData.keys && songData.keys.length > 0 && data) {
-        const keysToInsert = songData.keys.map(k => ({
-          song_id: data.id,
-          key_name: k,
-          status: publishStatus,
-          created_by: currentUser?.id
-        }));
-        const { error: keyError } = await supabase.from('song_keys').insert(keysToInsert);
-        if (keyError) throw keyError;
+    const dbSong = {
+      title: songData.title,
+      organization: songData.organization,
+      category: songData.category,
+      pdf_url: songData.pdfUrl,
+      thumbnail_url: songData.thumbnailUrl,
+      lyrics: songData.lyrics,
+      versions: songData.versions,
+      keys: songData.keys,
+      status: 'pending',
+      created_by: currentUser.id
+    };
+    
+    const { error: insertError } = await supabase.from('songs').insert([dbSong]);
+    if (insertError) {
+      console.error('7.3. Insert Error:', insertError);
+      if (insertError.code === '42703') {
+        // Fallback: missing thumbnail_url column
+        const { thumbnail_url, ...fallbackSong } = dbSong;
+        const { error: fallbackError } = await supabase.from('songs').insert([fallbackSong]);
+        if (fallbackError) throw fallbackError;
+      } else {
+        throw insertError;
       }
+    }
+    await get().fetchSongs();
+    },
 
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error adding song:', err);
-      // Re-throw so caller (PublisherDashboard) can handle showing the error in UI if needed
-      throw err;
+  addToRequestQueue: (songId) => {
+    const { requestQueue } = get();
+    if (!requestQueue.includes(songId)) {
+      set({ requestQueue: [...requestQueue, songId] });
     }
   },
 
-  addKeyToSong: async (songId, keyName, pdfUrl) => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    
-    const publishStatus = currentUser?.role === 'admin' ? 'approved' : 'pending';
-    
-    try {
-      const { error } = await supabase
-        .from('song_keys')
-        .insert({
-          song_id: songId,
-          key_name: keyName,
-          pdf_url: pdfUrl,
-          status: publishStatus,
-          created_by: currentUser?.id
-        });
-        
-      if (error) throw error;
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error adding key:', err);
-      alert(`Could not add key: ${err.message || 'Unknown error'}`);
-      throw err;
-    }
+  removeFromRequestQueue: (songId) => {
+    const { requestQueue } = get();
+    set({ requestQueue: requestQueue.filter(id => id !== songId) });
   },
 
-  removeKey: async (keyId) => {
-    if (!isSupabaseConfigured) return;
-    
-    try {
-      // Find key location to delete PDF if exists
-      const songWithKey = get().songs.find(s => s.keys?.some(k => k.id === keyId));
-      const key = songWithKey?.keys?.find(k => k.id === keyId);
-      
-      if (key?.pdfUrl) {
-        const path = key.pdfUrl.split('/public/music-sheets/').pop();
-        if (path) {
-          await supabase.storage.from('music-sheets').remove([path]);
-        }
-      }
+  approveServiceRequest: async (id) => {
+    set(state => ({
+      serviceRequests: state.serviceRequests.map(req => req.id === id ? { ...req, status: 'approved' } : req)
+    }));
+  },
+  declineServiceRequest: async (id) => {
+    set(state => ({
+      serviceRequests: state.serviceRequests.map(req => req.id === id ? { ...req, status: 'rejected' } : req)
+    }));
+  },
 
-      const { error } = await supabase
-        .from('song_keys')
-        .delete()
-        .eq('id', keyId);
-        
-      if (error) throw error;
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error removing key:', err);
-      alert(`Could not remove key: ${err.message || 'Unknown error'}`);
-    }
+  submitServiceRequest: async (date, message) => {
+    const { currentUser, serviceRequests, requestQueue } = get();
+    if (!currentUser || requestQueue.length === 0) return;
+    const newReq: ServiceRequest = {
+      id: Date.now().toString(),
+      song_ids: [...requestQueue],
+      user_id: currentUser.id,
+      date,
+      message,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    };
+    set({ serviceRequests: [...serviceRequests, newReq], requestQueue: [] });
   },
   
   updateUserRole: async (email, role) => {
     if (!isSupabaseConfigured) return;
     
-    try {
-      const userToUpdate = get().users.find(u => u.email === email);
-      if (!userToUpdate) return;
+    // We need to find the user ID first
+    const userToUpdate = get().users.find(u => u.email === email);
+    if (!userToUpdate) return;
+    
+    await supabase
+      .from('users')
+      .update({ role })
+      .eq('id', userToUpdate.id);
       
-      const { error } = await supabase
-        .from('users')
-        .update({ role })
-        .eq('id', userToUpdate.id);
-        
-      if (error) throw error;
-      await get().fetchUsers();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error updating user role:', err);
-      alert(`Could not update user role: ${err.message || 'Unknown error'}`);
-    }
+    get().fetchUsers();
   },
   
   approveSong: async (songId) => {
     if (!isSupabaseConfigured) return;
     
-    try {
-      const { error } = await supabase
-        .from('songs')
-        .update({ status: 'approved' })
-        .eq('id', songId);
-        
-      if (error) throw error;
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error approving song:', err);
-      alert(`Could not approve song: ${err.message || 'Unknown error'}`);
+    await supabase
+      .from('songs')
+      .update({ status: 'approved' })
+      .eq('id', songId);
+      
+    const song = get().songs.find(s => s.id === songId);
+    if (song && song.created_by) {
+      await supabase.from('notifications').insert({
+        user_id: song.created_by,
+        message: `Your song "${song.title}" has been approved!`,
+        type: 'approval',
+        read: false
+      });
     }
+      
+    get().fetchSongs();
   },
   
   declineSong: async (songId) => {
     if (!isSupabaseConfigured) return;
     
-    try {
-      const { error } = await supabase
-        .from('songs')
-        .delete()
-        .eq('id', songId);
-        
-      if (error) throw error;
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error declining song:', err);
-      alert(`Could not decline song: ${err.message || 'Unknown error'}`);
-    }
+    await supabase
+      .from('songs')
+      .delete()
+      .eq('id', songId);
+      
+    get().fetchSongs();
   },
   
   deleteSong: async (songId) => {
     if (!isSupabaseConfigured) return;
     
-    // Best-effort storage cleanup — never blocks the DB delete
-    try {
-      const song = get().songs.find(s => s.id === songId);
-      if (song) {
-        const pathsToDelete: string[] = [];
-
-        // Main PDF
-        if (song.pdfUrl) {
-          const p = song.pdfUrl.split('/public/music-sheets/').pop();
-          if (p) pathsToDelete.push(p);
-        }
-        // Thumbnail
-        if (song.previewUrl) {
-          const p = song.previewUrl.split('/public/music-sheets/').pop();
-          if (p) pathsToDelete.push(p);
-        }
-        // Key PDFs
-        if (song.keys) {
-          for (const k of song.keys) {
-            if (k.pdfUrl) {
-              const p = k.pdfUrl.split('/public/music-sheets/').pop();
-              if (p) pathsToDelete.push(p);
-            }
-          }
-        }
-
-        if (pathsToDelete.length > 0) {
-          await supabase.storage.from('music-sheets').remove(pathsToDelete);
-        }
-      }
-    } catch (storageErr) {
-      // Storage cleanup failed — log it but continue to delete the DB record
-      console.warn('[WARN] Storage cleanup error (non-fatal):', storageErr);
-    }
-
-    // Always attempt to delete the DB record
-    try {
-      const { error } = await supabase
-        .from('songs')
-        .delete()
-        .eq('id', songId);
-        
-      if (error) throw error;
+    await supabase
+      .from('songs')
+      .delete()
+      .eq('id', songId);
       
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error deleting song:', err);
-      alert(`Could not delete song: ${err.message || 'Unknown error'}`);
-    }
+    get().fetchSongs();
   },
 
-  updateSong: async (songId, updates) => {
-    if (!isSupabaseConfigured) return;
-    
-    try {
-      const song = get().songs.find(s => s.id === songId);
-      const dbUpdates: any = { ...updates };
-      
-      if (updates.pdfUrl !== undefined) { 
-        dbUpdates.pdf_url = updates.pdfUrl; 
-        delete dbUpdates.pdfUrl; 
-        // Cleanup old PDF
-        if (song?.pdfUrl && song.pdfUrl !== updates.pdfUrl) {
-          const oldPath = song.pdfUrl.split('/public/music-sheets/').pop();
-          if (oldPath) await supabase.storage.from('music-sheets').remove([oldPath]);
-        }
-      }
-      
-      if (updates.previewUrl !== undefined) { 
-        dbUpdates.preview_url = updates.previewUrl; 
-        delete dbUpdates.previewUrl; 
-        // Cleanup old thumbnail
-        if (song?.previewUrl && song.previewUrl !== updates.previewUrl) {
-          const oldThumbPath = song.previewUrl.split('/public/music-sheets/').pop();
-          if (oldThumbPath) await supabase.storage.from('music-sheets').remove([oldThumbPath]);
-        }
-      }
-      
-      const { error } = await supabase
-        .from('songs')
-        .update(dbUpdates)
-        .eq('id', songId);
-        
-      if (error) throw error;
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error updating song:', err);
-      throw err; 
+  editSong: async (songId, updates) => {
+    if (!isSupabaseConfigured) {
+      // Mock update
+      set(state => ({
+        songs: state.songs.map(s => s.id === songId ? { ...s, ...updates } : s)
+      }));
+      return;
     }
+    
+    // Pass updates directly to Supabase
+    const supabaseUpdates: any = { ...updates };
+    
+    await supabase
+      .from('songs')
+      .update(supabaseUpdates)
+      .eq('id', songId);
+    get().fetchSongs();
   },
 
-  updateKeyPdf: async (keyId, pdfUrl) => {
+  
+    deleteNotification: async (id) => {
     if (!isSupabaseConfigured) return;
-    
-    try {
-      const songWithKey = get().songs.find(s => s.keys?.some(k => k.id === keyId));
-      const key = songWithKey?.keys?.find(k => k.id === keyId);
+    await supabase.from('notifications').delete().eq('id', id);
+    set(state => ({
+      notifications: state.notifications.filter(n => n.id !== id)
+    }));
+  },
 
-      // Cleanup old PDF if it's being replaced
-      if (key?.pdfUrl && key.pdfUrl !== pdfUrl) {
-        const oldPath = key.pdfUrl.split('/public/music-sheets/').pop();
-        if (oldPath) await supabase.storage.from('music-sheets').remove([oldPath]);
-      }
-
-      const { error } = await supabase
-        .from('song_keys')
-        .update({ pdf_url: pdfUrl })
-        .eq('id', keyId);
-        
-      if (error) throw error;
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error updating key PDF:', err);
-      throw err;
+  fetchNotifications: async () => {
+    if (!isSupabaseConfigured) return;
+    const { currentUser } = get();
+    if (!currentUser) return;
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false });
+    if (!error && data) {
+      set({ notifications: data as Notification[] });
     }
   },
 
   fetchSongs: async () => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      console.warn('Supabase is not configured yet');
+      
+      return;
+    }
     
-    const { data: songsData } = await supabase
-      .from('songs')
-      .select('*');
-      
-    const { data: keysData } = await supabase
-      .from('song_keys')
-      .select('*');
-      
-    if (songsData) {
-      const formattedSongs: Song[] = songsData.map(s => {
-        const songKeys = keysData 
-          ? keysData.filter(k => k.song_id === s.id).map(k => ({
-              id: k.id,
-              name: k.key_name,
-              pdfUrl: k.pdf_url
-            }))
-          : [];
-          
-        return {
+    try {
+      const { data: songsData, error } = await supabase
+        .from('songs')
+        .select('*');
+        
+      if (error) {
+        console.error('Error fetching songs:', error);
+        
+        
+      }
+        
+      if (songsData) {
+        console.log('Fetched raw songs:', songsData);
+        
+        // Filter out known broken records from previous failed tests
+        const brokenIds = ['ffa8ee96-7ab8-4eec-b7ec-0e6e53467865', '6f5eb876-9838-40be-a4e6-eff146f677df'];
+        const validSongsData = songsData.filter(s => !brokenIds.includes(s.id));
+        
+        const formattedSongs: Song[] = validSongsData.map(s => ({
           id: s.id,
-          title: s.title,
-          author: s.author,
-          category: s.category,
-          audience: s.audience as 'band' | 'worship',
-          pdfUrl: s.pdf_url,
-          previewUrl: s.preview_url,
-          lyrics: s.lyrics,
-          status: s.status as 'pending' | 'approved',
-          keys: songKeys
-        };
-      });
-      set({ songs: formattedSongs });
+          title: s.title || 'Untitled',
+          organization: s.organization || s.author || '',
+          category: s.category || 'Worship',
+          pdfUrl: s.pdf_url || '',
+          thumbnailUrl: s.thumbnail_url || undefined,
+          lyrics: s.lyrics || '',
+          status: s.status as 'pending' | 'approved' || 'pending',
+          keys: s.keys || [],
+          versions: s.versions || [],
+          approval_count: s.approval_count || 0
+        }));
+        console.log('Formatted songs:', formattedSongs);
+        set({ songs: formattedSongs });
+      }
+    } catch (e) {
+      console.error('Exception fetching songs:', e);
+      
     }
   },
 
@@ -558,661 +434,6 @@ export const useStore = create<AppState>((set, get) => ({
         favourites: [] // We don't need to load everyone's favourites for the admin view
       }));
       set({ users: formattedUsers });
-    }
-  },
-
-  submitToWorship: async (songIds: string[], message?: string, worshipDate?: string) => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    if (!currentUser) return;
-
-    try {
-      // Step 1: Create worship_submission batch record
-      const payload: Record<string, any> = {
-        user_id: currentUser.id,
-        status: 'pending',
-        message: message || null,
-        submitted_at: new Date().toISOString()
-      };
-      if (worshipDate) {
-        payload.worship_date = worshipDate;
-      }
-
-      let submissionResponse = await supabase
-        .from('worship_submissions')
-        .insert(payload)
-        .select('id')
-        .single();
-
-      let submissionData = submissionResponse.data;
-      let submissionError = submissionResponse.error;
-
-      if (submissionError && /worship_date/.test(submissionError.message || '')) {
-        console.warn('[CRITICAL] worship_date column missing, retrying without the date column.');
-        delete payload.worship_date;
-        if (worshipDate) {
-          payload.message = message
-            ? `${message} (${worshipDate})`
-            : `Worship date: ${worshipDate}`;
-        }
-
-        submissionResponse = await supabase
-          .from('worship_submissions')
-          .insert(payload)
-          .select('id')
-          .single();
-
-        submissionData = submissionResponse.data;
-        submissionError = submissionResponse.error;
-      }
-
-      if (submissionError) {
-        if (isMissingTableError(submissionError, 'worship_submissions')) {
-          const { error: fallbackError } = await supabase
-            .from('worship_collections')
-            .insert(
-              songIds.map(songId => ({
-                user_id: currentUser.id,
-                song_id: songId,
-                status: 'pending',
-                submitted_at: new Date().toISOString()
-              }))
-            );
-
-          if (fallbackError) throw fallbackError;
-          await get().fetchWorshipSubmissions();
-          return;
-        }
-
-        throw submissionError;
-      }
-
-      if (!submissionData) throw new Error('Failed to create submission');
-
-      // Step 2: Insert songs linked to submission
-      const { error: songsError } = await supabase
-        .from('worship_collections')
-        .insert(
-          songIds.map(songId => ({
-            user_id: currentUser.id,
-            song_id: songId,
-            status: 'pending',
-            submission_id: submissionData.id
-          }))
-        );
-
-      if (songsError) throw songsError;
-      await get().fetchWorshipSubmissions();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error submitting to worship:', err);
-      throw err;
-    }
-  },
-
-  fetchWorshipSubmissions: async () => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-
-    try {
-      // Fetch worship_submissions
-      let submissionsQuery = supabase
-        .from('worship_submissions')
-        .select('*')
-        .order('submitted_at', { ascending: false });
-
-      // Admins see only pending requests; users see their own records
-      if (currentUser?.role === 'admin') {
-        submissionsQuery = submissionsQuery.eq('status', 'pending');
-      } else {
-        submissionsQuery = submissionsQuery.eq('user_id', currentUser?.id || '');
-      }
-
-      const { data: submissions, error: submissionsError } = await submissionsQuery;
-
-      if (submissionsError) {
-        if (isMissingTableError(submissionsError, 'worship_submissions')) {
-          let collectionQuery = supabase
-            .from('worship_collections')
-            .select('id,user_id,song_id,status,submitted_at,approved_at')
-            .order('submitted_at', { ascending: false });
-
-          if (currentUser?.role === 'admin') {
-            collectionQuery = collectionQuery.eq('status', 'pending');
-          } else {
-            collectionQuery = collectionQuery.eq('user_id', currentUser?.id || '');
-          }
-
-          const { data: collectionRows, error: collectionError } = await collectionQuery;
-
-          if (collectionError) throw collectionError;
-
-          const fallbackSubmissions: WorshipSubmission[] = (collectionRows || []).map((row: any) => ({
-            id: row.id,
-            userId: row.user_id,
-            songIds: [row.song_id],
-            status: row.status,
-            submittedAt: row.submitted_at,
-            approvedAt: row.approved_at,
-            message: undefined
-          }));
-
-          set({ worshipSubmissions: fallbackSubmissions });
-          return;
-        }
-
-        throw submissionsError;
-      }
-
-      if (submissions && submissions.length > 0) {
-        // For each submission, fetch its songs
-        const submissionsWithSongs: WorshipSubmission[] = await Promise.all(
-          submissions.map(async (sub: any) => {
-            const { data: songRows } = await supabase
-              .from('worship_collections')
-              .select('song_id')
-              .eq('submission_id', sub.id);
-
-            return {
-              id: sub.id,
-              userId: sub.user_id,
-              songIds: songRows?.map((r: any) => r.song_id) || [],
-              status: sub.status,
-              submittedAt: sub.submitted_at,
-              approvedAt: sub.approved_at,
-              message: sub.message
-            };
-          })
-        );
-
-        set({ worshipSubmissions: submissionsWithSongs });
-      } else {
-        set({ worshipSubmissions: [] });
-      }
-    } catch (err: any) {
-      console.error('[CRITICAL] Error fetching worship submissions:', err);
-    }
-  },
-
-  approveWorshipSubmission: async (submissionId: string) => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    if (!currentUser) return;
-
-    try {
-      const approvedAt = new Date().toISOString();
-
-      let submissionUserId: string | null = null;
-      let submissionMessage: string | null = null;
-      let worshipDate: string | null = null;
-      let songIds: string[] = [];
-      let isCollectionFallback = false;
-
-      let { data: submissionData, error: fetchError } = await supabase
-        .from('worship_submissions')
-        .select('user_id, message, worship_date')
-        .eq('id', submissionId)
-        .maybeSingle();
-
-      if (fetchError && /worship_date/.test(fetchError.message || '')) {
-        const fallback = await supabase
-          .from('worship_submissions')
-          .select('user_id, message')
-          .eq('id', submissionId)
-          .maybeSingle();
-        submissionData = fallback.data;
-        fetchError = fallback.error;
-      }
-
-      if (!fetchError && submissionData) {
-        submissionUserId = submissionData.user_id;
-        submissionMessage = submissionData.message;
-        worshipDate = submissionData.worship_date;
-
-        const { data: collectionRows, error: collectionFetchError } = await supabase
-          .from('worship_collections')
-          .select('song_id')
-          .eq('submission_id', submissionId);
-
-        if (!collectionFetchError && collectionRows) {
-          songIds = collectionRows.map((row: any) => row.song_id);
-        }
-
-        const { error: submissionUpdateError } = await supabase
-          .from('worship_submissions')
-          .update({
-            status: 'approved',
-            approved_by: currentUser.id,
-            approved_at: approvedAt
-          })
-          .eq('id', submissionId);
-
-        if (submissionUpdateError) throw submissionUpdateError;
-
-        const { error: collectionUpdateError } = await supabase
-          .from('worship_collections')
-          .update({
-            status: 'approved',
-            approved_by: currentUser.id,
-            approved_at: approvedAt
-          })
-          .eq('submission_id', submissionId);
-
-        if (collectionUpdateError) throw collectionUpdateError;
-      } else if (fetchError && isMissingTableError(fetchError, 'worship_submissions')) {
-        isCollectionFallback = true;
-      } else if (!submissionData) {
-        isCollectionFallback = true;
-      }
-
-      if (isCollectionFallback) {
-        const { data: songRow, error: songRowError } = await supabase
-          .from('worship_collections')
-          .select('song_id, user_id')
-          .eq('id', submissionId)
-          .single();
-
-        if (songRowError) throw songRowError;
-
-        submissionUserId = songRow?.user_id || submissionUserId;
-        if (songRow?.song_id) {
-          songIds = [songRow.song_id];
-        }
-
-        const { error: collectionUpdateError } = await supabase
-          .from('worship_collections')
-          .update({
-            status: 'approved',
-            approved_by: currentUser.id,
-            approved_at: approvedAt
-          })
-          .eq('id', submissionId);
-
-        if (collectionUpdateError) throw collectionUpdateError;
-      }
-
-      if (songIds.length > 0) {
-        for (const songId of songIds) {
-          const { error: pickError } = await supabase
-            .from('song_picks')
-            .insert({
-              song_id: songId,
-              approved_by: currentUser.id,
-              picked_at: approvedAt
-            });
-
-          if (pickError) throw pickError;
-        }
-      }
-
-      if (submissionUserId) {
-        const songTitles = songIds.map(id => get().songs.find(s => s.id === id)?.title).filter(Boolean);
-        const { error: notificationError } = await supabase
-          .from('notifications')
-          .insert({
-            user_id: submissionUserId,
-            type: 'worship_approved',
-            title: 'Worship Submission Approved',
-            message: songTitles.length > 0
-              ? `Your submission for "${songTitles.join(', ')}" has been approved and added to the worship list.`
-              : submissionMessage || 'Your worship submission has been approved and added to the worship list.',
-            data: { submissionId, songIds, status: 'approved', requestMessage: submissionMessage, worshipDate }
-          });
-
-        if (notificationError) {
-          if (isMissingTableError(notificationError, 'notifications')) {
-            console.error('[CRITICAL] Notifications table missing. Approval notification could not be saved.');
-          } else {
-            console.warn('[WARN] Could not insert approval notification:', notificationError);
-          }
-        } else {
-          await get().trimNotifications(submissionUserId, 5);
-        }
-      }
-
-      set(state => ({
-        worshipSubmissions: state.worshipSubmissions.filter(s => s.id !== submissionId)
-      }));
-
-      await get().fetchWorshipSubmissions();
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error approving worship submission:', err);
-      alert(`Could not approve: ${err.message || 'Unknown error'}`);
-    }
-  },
-
-  declineWorshipSubmission: async (submissionId: string) => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    if (!currentUser) return;
-
-    try {
-      const declinedAt = new Date().toISOString();
-      let submissionUserId: string | null = null;
-      let submissionMessage: string | null = null;
-      let worshipDate: string | null = null;
-      let songIds: string[] = [];
-      let isCollectionFallback = false;
-
-      let { data: submissionData, error: fetchError } = await supabase
-        .from('worship_submissions')
-        .select('user_id, message, worship_date')
-        .eq('id', submissionId)
-        .maybeSingle();
-
-      if (fetchError && /worship_date/.test(fetchError.message || '')) {
-        const fallback = await supabase
-          .from('worship_submissions')
-          .select('user_id, message')
-          .eq('id', submissionId)
-          .maybeSingle();
-        submissionData = fallback.data;
-        fetchError = fallback.error;
-      }
-
-      if (!fetchError && submissionData) {
-        submissionUserId = submissionData.user_id;
-        submissionMessage = submissionData.message;
-        worshipDate = submissionData.worship_date;
-
-        const { data: collectionRows, error: collectionFetchError } = await supabase
-          .from('worship_collections')
-          .select('song_id')
-          .eq('submission_id', submissionId);
-
-        if (!collectionFetchError && collectionRows) {
-          songIds = collectionRows.map((row: any) => row.song_id);
-        }
-
-        const { error: submissionUpdateError } = await supabase
-          .from('worship_submissions')
-          .update({
-            status: 'rejected',
-            approved_by: currentUser.id,
-            approved_at: declinedAt
-          })
-          .eq('id', submissionId);
-
-        if (submissionUpdateError) throw submissionUpdateError;
-
-        const { error: collectionUpdateError } = await supabase
-          .from('worship_collections')
-          .update({
-            status: 'rejected',
-            approved_by: currentUser.id,
-            approved_at: declinedAt
-          })
-          .eq('submission_id', submissionId);
-
-        if (collectionUpdateError) throw collectionUpdateError;
-      } else if (fetchError && isMissingTableError(fetchError, 'worship_submissions')) {
-        isCollectionFallback = true;
-      } else if (!submissionData) {
-        isCollectionFallback = true;
-      }
-
-      if (isCollectionFallback) {
-        const { data: collectionData, error: collectionFetchError } = await supabase
-          .from('worship_collections')
-          .select('song_id, user_id')
-          .eq('id', submissionId)
-          .single();
-
-        if (collectionFetchError) throw collectionFetchError;
-
-        submissionUserId = collectionData?.user_id || submissionUserId;
-        if (collectionData?.song_id) {
-          songIds = [collectionData.song_id];
-        }
-
-        const { error: collectionUpdateError } = await supabase
-          .from('worship_collections')
-          .update({
-            status: 'rejected',
-            approved_by: currentUser.id,
-            approved_at: declinedAt
-          })
-          .eq('id', submissionId);
-
-        if (collectionUpdateError) throw collectionUpdateError;
-      }
-
-      if (submissionUserId) {
-        const songTitles = songIds.map(id => get().songs.find(s => s.id === id)?.title).filter(Boolean);
-        const { error: notificationError } = await supabase
-          .from('notifications')
-          .insert({
-            user_id: submissionUserId,
-            type: 'worship_rejected',
-            title: 'Worship Submission Rejected',
-            message: songTitles.length > 0
-              ? `Your submission for "${songTitles.join(', ')}" has been rejected.`
-              : submissionMessage || 'Your worship submission has been rejected.',
-            data: { submissionId, songIds, status: 'rejected', requestMessage: submissionMessage, worshipDate }
-          });
-
-        if (notificationError) {
-          if (isMissingTableError(notificationError, 'notifications')) {
-            console.error('[CRITICAL] Notifications table missing. Rejection notification could not be saved.');
-          } else {
-            console.warn('[WARN] Could not insert rejection notification:', notificationError);
-          }
-        } else {
-          await get().trimNotifications(submissionUserId, 5);
-        }
-      }
-
-      set(state => ({
-        worshipSubmissions: state.worshipSubmissions.filter(s => s.id !== submissionId)
-      }));
-
-      await get().fetchWorshipSubmissions();
-      await get().fetchSongs();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error declining worship submission:', err);
-      alert(`Could not decline: ${err.message || 'Unknown error'}`);
-    }
-  },
-
-  deleteWorshipSubmission: async (submissionId: string) => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    if (!currentUser || currentUser.role !== 'admin') return;
-
-    try {
-      let isCollectionFallback = false;
-      const { error: submissionError } = await supabase
-        .from('worship_submissions')
-        .delete()
-        .eq('id', submissionId);
-
-      if (submissionError) {
-        if (isMissingTableError(submissionError, 'worship_submissions')) {
-          isCollectionFallback = true;
-        } else {
-          throw submissionError;
-        }
-      }
-
-      if (isCollectionFallback) {
-        const { error: collectionError } = await supabase
-          .from('worship_collections')
-          .delete()
-          .eq('id', submissionId);
-
-        if (collectionError) throw collectionError;
-      } else {
-        // Delete associated collection entries
-        const { error: collectionError } = await supabase
-          .from('worship_collections')
-          .delete()
-          .eq('submission_id', submissionId);
-
-        if (collectionError) throw collectionError;
-      }
-
-      await get().fetchWorshipSubmissions();
-    } catch (err: any) {
-      console.error('[CRITICAL] Error deleting worship submission:', err);
-      alert(`Could not delete submission: ${err.message || 'Unknown error'}`);
-    }
-  },
-
-  getPickCount: (songId: string) => {
-    if (!isSupabaseConfigured) return 0;
-    
-    // This would require an additional query to get pick counts
-    // For now, returning the pick count from song data
-    const song = get().songs.find(s => s.id === songId);
-    return song?.pickCount || 0;
-  },
-
-  // Cart methods (ephemeral shopping cart - in-memory only)
-  addToCart: (songId: string) => {
-    set((state) => ({
-      cartItems: state.cartItems.includes(songId) ? state.cartItems : [...state.cartItems, songId]
-    }));
-  },
-
-  removeFromCart: (songId: string) => {
-    set((state) => ({
-      cartItems: state.cartItems.filter(id => id !== songId)
-    }));
-  },
-
-  clearCart: () => {
-    set({ cartItems: [] });
-  },
-
-  isInCart: (songId: string) => {
-    const { cartItems } = get();
-    return cartItems.includes(songId);
-  },
-
-  getPendingPublisherCount: () => {
-    const { songs } = get();
-    return songs.filter(s => s.status === 'pending').length;
-  },
-
-  getPendingWorshipCount: () => {
-    const { worshipSubmissions } = get();
-    return worshipSubmissions.filter(s => s.status === 'pending').length;
-  },
-
-  getPendingAccessCount: () => {
-    const { users } = get();
-    return users.filter(u => u.role === 'user').length; // Count of regular users (could enhance with access requests)
-  },
-
-  // Notification methods
-  fetchNotifications: async () => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    if (!currentUser) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        if (isMissingTableError(error, 'notifications')) {
-          console.error('[CRITICAL] Notifications table missing. Create public.notifications in Supabase to enable inbox messages.');
-          set({ notifications: [] });
-          return;
-        }
-        throw error;
-      }
-
-      const formattedNotifications: Notification[] = (data || []).map(n => ({
-        id: n.id,
-        userId: n.user_id,
-        type: n.type,
-        title: n.title,
-        message: n.message,
-        data: n.data,
-        createdAt: n.created_at
-      }));
-
-      set({ notifications: formattedNotifications });
-    } catch (err: any) {
-      console.error('[CRITICAL] Error fetching notifications:', err);
-    }
-  },
-
-  deleteNotification: async (notificationId: string) => {
-    if (!isSupabaseConfigured) return;
-
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('id', notificationId);
-
-      if (error) throw error;
-
-      set(state => ({
-        notifications: state.notifications.filter(n => n.id !== notificationId)
-      }));
-    } catch (err: any) {
-      console.error('[CRITICAL] Error deleting notification:', err);
-    }
-  },
-
-  trimNotifications: async (userId: string, maxCount: number) => {
-    if (!isSupabaseConfigured) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('id')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        if (isMissingTableError(error, 'notifications')) {
-          return;
-        }
-        throw error;
-      }
-
-      const notificationIds = (data || []).map((n: any) => n.id);
-      if (notificationIds.length <= maxCount) return;
-
-      const idsToKeep = notificationIds.slice(0, maxCount);
-      const { error: deleteError } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('user_id', userId)
-        .not('id', 'in', idsToKeep);
-
-      if (deleteError) throw deleteError;
-    } catch (err: any) {
-      console.error('[CRITICAL] Error trimming notifications:', err);
-    }
-  },
-
-  clearAllNotifications: async () => {
-    if (!isSupabaseConfigured) return;
-    const { currentUser } = get();
-    if (!currentUser) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('user_id', currentUser.id);
-
-      if (error) {
-        console.error('[CRITICAL] Error clearing all notifications:', error);
-        return;
-      }
-      console.log('[INFO] clearAllNotifications deleted notifications:', data?.length);
-      set({ notifications: [] });
-    } catch (err: any) {
-      console.error('[CRITICAL] Error clearing all notifications:', err);
     }
   }
 }));

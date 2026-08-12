@@ -1,0 +1,21 @@
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config({ path: '.env.local' });
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+async function test() {
+  console.log('Testing sign up...');
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: `test_${Date.now()}@example.com`,
+      password: 'password123',
+      options: { data: { name: 'Test' } }
+    });
+    console.log('Sign up complete:', { data, error });
+  } catch (err) {
+    console.error('Caught error:', err);
+  }
+}
+test();

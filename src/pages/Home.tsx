@@ -1,100 +1,158 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Search, Music, Mic2 } from 'lucide-react';
+import { ArrowRight, Star, Music, Mic } from 'lucide-react';
 import { useStore } from '../store';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 export function Home() {
   const { t } = useTranslation();
-  const { songs } = useStore();
-  const [activeTab, setActiveTab] = useState<'band' | 'worship'>('band');
-  const [searchQuery, setSearchQuery] = useState('');
+  const { songs, currentUser, serviceRequests } = useStore();
 
-  const filteredSongs = songs.filter(song => 
-    song.status === 'approved' &&
-    song.audience === activeTab &&
-    (song.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-     song.author.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const approvedSongs = songs.filter(song => song.status === 'approved');
+  
+  // Selected songs: songs that have been approved by pastor
+  const approvedRequests = serviceRequests.filter(req => req.status === 'approved');
+  const selectedSongIds = new Set(approvedRequests.flatMap(req => req.song_ids));
+  const topSongs = songs.filter(song => selectedSongIds.has(song.id));
+
+  const previewSongs = approvedSongs.slice(0, 8);
 
   return (
-    <div className="space-y-16">
-      <div className="text-center space-y-6 max-w-3xl mx-auto">
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-display font-bold text-on-surface tracking-tight">
-          {t('home.title')}
-        </h1>
-        <p className="text-lg sm:text-xl text-on-surface-variant font-medium">
-          {t('home.subtitle')}
-        </p>
-      </div>
+    <div className="space-y-20">
 
-      <div className="max-w-2xl mx-auto relative rounded-t-xl rounded-b-sm bg-surface-container-highest">
-        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-          <Search className="h-5 w-5 text-outline-variant" />
+      {/* Welcome Banner for Logged In User */}
+      {currentUser && (
+        <section className="bg-primary/10 rounded-2xl p-6 border border-primary/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-ambient">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-on-surface">
+              {t('home.welcomeBack', { name: currentUser.name || currentUser.email })}
+            </h1>
+            <p className="text-on-surface-variant mt-1 text-sm">
+              <span>{t("home.signedInAs", { role: currentUser.role })}</span>
+            </p>
+          </div>
+          <div className="mt-4 sm:mt-0 flex flex-wrap gap-3">
+            {currentUser.role === 'admin' && (
+              <Link to="/admin" className="inline-block px-6 py-2 bg-primary text-on-primary rounded-full hover:bg-primary-container text-sm font-bold shadow-ambient transition-colors whitespace-nowrap">
+                {t('home.goToAdminHub')}
+              </Link>
+            )}
+            {(currentUser.role === 'publisher' || currentUser.role === 'collaborator' || currentUser.role === 'admin') && (
+              <Link to="/publisher" className="inline-block px-6 py-2 bg-primary text-on-primary rounded-full hover:bg-primary-container text-sm font-bold shadow-ambient transition-colors whitespace-nowrap">
+                {t('home.goToPublisherDashboard')}
+              </Link>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Selected Songs Section */}
+      <section>
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-on-surface">
+              {t('home.selectedSongs') || "Selected songs in this month"}
+            </h2>
+          </div>
         </div>
-        <input
-          type="text"
-          className="block w-full pl-12 pr-4 py-4 border-b-2 border-transparent bg-transparent leading-5 text-on-surface placeholder-on-surface-variant/70 focus:outline-none focus:border-primary sm:text-base transition-colors rounded-t-xl rounded-b-sm"
-          placeholder={t('home.searchPlaceholder')}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
-
-      <div className="flex justify-center">
-        <div className="inline-flex bg-surface-container p-1 rounded-full">
-          <button
-            className={`px-8 py-3 text-sm font-medium rounded-full transition-all flex items-center space-x-2 ${
-              activeTab === 'band'
-                ? 'bg-primary text-on-primary shadow-ambient'
-                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'
-            }`}
-            onClick={() => setActiveTab('band')}
-          >
-            <Music className="w-4 h-4" />
-            <span>{t('home.tab.band')}</span>
-          </button>
-          <button
-            className={`px-8 py-3 text-sm font-medium rounded-full transition-all flex items-center space-x-2 ${
-              activeTab === 'worship'
-                ? 'bg-primary text-on-primary shadow-ambient'
-                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'
-            }`}
-            onClick={() => setActiveTab('worship')}
-          >
-            <Mic2 className="w-4 h-4" />
-            <span>{t('home.tab.worship')}</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-        {filteredSongs.map(song => (
-          <Link key={song.id} to={`/song/${song.id}`} className="group block space-y-4">
-            <div className="aspect-[3/4] bg-surface-container-lowest rounded-2xl overflow-hidden relative shadow-ambient group-hover:-translate-y-1 transition-all duration-300">
-              {song.previewUrl ? (
-                <img src={song.previewUrl} alt={song.title} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-outline-variant">
-                  <Music className="w-12 h-12 opacity-20" />
-                </div>
-              )}
-            </div>
-            <div className="space-y-1 px-2">
-              <h3 className="text-lg font-bold text-on-surface line-clamp-1">{song.title}</h3>
-              <div className="flex items-center justify-between text-sm text-on-surface-variant">
-                <span className="truncate pr-2">{song.author}</span>
-                <span className="bg-surface-container px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase shrink-0">{song.category}</span>
-              </div>
-            </div>
-          </Link>
-        ))}
-        {filteredSongs.length === 0 && (
-          <div className="col-span-full text-center py-16 text-on-surface-variant text-lg">
-            {t('home.empty')}
+        
+        {topSongs.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {topSongs.map(song => (
+              <SongCard key={song.id} song={song} showApprovalCount />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-surface-container-lowest p-12 rounded-3xl text-center shadow-ambient border border-outline-variant/20">
+            <p className="text-xl font-medium text-on-surface-variant">
+              {t('home.emptySelection') || "Remember to send your chosen songs to the pastor!"}
+            </p>
           </div>
         )}
+      </section>
+
+      {/* All Songs Preview Section */}
+      <section>
+        <div className="flex items-end justify-between mb-8">
+          <h2 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-on-surface">
+            {t('home.allSongs') || "Songs"}
+          </h2>
+          <Link 
+            to="/songs" 
+            className="group flex items-center text-sm font-bold text-primary hover:text-primary-container transition-colors"
+          >
+            {t('home.all')} <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+          </Link>
+        </div>
+
+        {previewSongs.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {previewSongs.map(song => (
+              <SongCard key={song.id} song={song} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 text-on-surface-variant">{t('home.noSongs')}</div>
+        )}
+      </section>
+      
+    </div>
+  );
+}
+
+function SongCard({ song, showApprovalCount = false }: { song: any; showApprovalCount?: boolean; key?: React.Key }) {
+  const { t } = useTranslation();
+  const { currentUser, toggleFavourite, addToRequestQueue, removeFromRequestQueue, requestQueue } = useStore();
+  const isFav = currentUser?.favourites.includes(song.id);
+  const inQueue = requestQueue.includes(song.id);
+
+  return (
+    <div className="group block space-y-4 bg-surface-container-lowest p-4 rounded-2xl shadow-ambient hover:shadow-lg transition-all relative border border-outline-variant/10">
+      <div className="absolute top-6 right-6 flex space-x-2 z-10">
+        {currentUser && (
+          <button 
+            onClick={(e) => { e.preventDefault(); toggleFavourite(song.id); }}
+            className={`p-2 rounded-full backdrop-blur-md transition-colors ${isFav ? 'bg-primary text-on-primary' : 'bg-surface/50 text-on-surface-variant hover:bg-surface hover:text-primary'}`}
+          >
+            <Star className="w-4 h-4" fill={isFav ? 'currentColor' : 'none'} />
+          </button>
+        )}
+        {currentUser && (
+          <button 
+            onClick={(e) => { e.preventDefault(); inQueue ? removeFromRequestQueue(song.id) : addToRequestQueue(song.id); }}
+            className={`p-2 rounded-full backdrop-blur-md transition-colors ${inQueue ? 'bg-primary text-on-primary' : 'bg-surface/50 text-on-surface-variant hover:bg-surface hover:text-primary'}`}
+          >
+            <Mic className="w-4 h-4" fill={inQueue ? "currentColor" : "none"} />
+          </button>
+        )}
       </div>
+
+      <Link to={`/song/${song.id}`}>
+        <div className="aspect-[3/4] bg-surface-container rounded-xl overflow-hidden relative flex items-center justify-center group-hover:scale-[1.02] transition-transform">
+          {song.thumbnailUrl ? (
+            <img src={song.thumbnailUrl} alt={song.title} className="w-full h-full object-cover" />
+          ) : (
+            <Music className="w-10 h-10 text-outline-variant opacity-30" />
+          )}
+        </div>
+        <div className="pt-3 space-y-1">
+          <h3 className="text-base font-bold text-on-surface truncate group-hover:text-primary transition-colors" title={song.title}>
+            {song.title}
+          </h3>
+          <div className="flex items-center justify-between text-xs text-on-surface-variant">
+            <span className="truncate pr-2">{song.organization}</span>
+            <span className="bg-surface-container px-2 py-0.5 rounded-full font-bold uppercase shrink-0">
+              {song.category}
+            </span>
+          </div>
+          {showApprovalCount && song.approval_count > 0 && (
+            <div className="mt-2 text-xs font-medium text-primary">
+              {t('home.approvedTimes', { count: song.approval_count })}
+            </div>
+          )}
+        </div>
+      </Link>
     </div>
   );
 }
