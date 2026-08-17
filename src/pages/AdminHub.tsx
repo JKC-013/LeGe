@@ -9,11 +9,16 @@ export function AdminHub() {
   const { t } = useTranslation();
   const { users, songs, updateUserRole, approveSong, declineSong, deleteSong, editSong } = useStore();
   const [activeTab, setActiveTab] = useState<'access' | 'publisher' | 'score' | 'report'>('access');
-  const [searchEmail, setSearchEmail] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [editingSong, setEditingSong] = useState<Song | null>(null);
 
-  const filteredUsers = users.filter(u => u.email.toLowerCase().includes(searchEmail.toLowerCase()) || (u.name && u.name.toLowerCase().includes(searchEmail.toLowerCase())));
+  const safeQuery = (searchQuery || '').trim().toLowerCase();
+  const filteredUsers = users.filter(u => {
+    const emailMatch = u.email ? u.email.toLowerCase().includes(safeQuery) : false;
+    const nameMatch = u.name ? u.name.toLowerCase().includes(safeQuery) : false;
+    return emailMatch || nameMatch;
+  });
   const pendingSongs = songs.filter(s => s.status === 'pending');
   const approvedSongs = songs.filter(s => s.status === 'approved');
 
@@ -89,9 +94,9 @@ export function AdminHub() {
               <input
                 type="text"
                 className="block w-full pl-10 pr-3 py-2 bg-surface-container-highest border-b-2 border-transparent focus:border-primary rounded-t-lg rounded-b-sm leading-5 text-on-surface placeholder-on-surface-variant/70 focus:outline-none sm:text-sm transition-colors"
-                placeholder={t('admin.searchEmail')}
-                value={searchEmail}
-                onChange={(e) => setSearchEmail(e.target.value)}
+                placeholder={t('admin.searchQuery')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             

@@ -30,6 +30,12 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can read all profiles" ON public.users FOR SELECT USING (true);
 CREATE POLICY "Users can update their own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Admins can update user roles" ON public.users FOR UPDATE USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
 
 -- 3. Create Songs Table
 CREATE TABLE public.songs (

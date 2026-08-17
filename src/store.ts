@@ -124,6 +124,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
         get().fetchSongs();
         get().fetchNotifications();
+        get().fetchUsers();
       } else {
         set({ currentUser: null, users: [], songs: [] });
         get().fetchSongs();
@@ -430,6 +431,7 @@ export const useStore = create<AppState>((set, get) => ({
       const formattedUsers: User[] = data.map(u => ({
         id: u.id,
         email: u.email,
+        name: u.name,
         role: u.role as UserRole,
         favourites: [] // We don't need to load everyone's favourites for the admin view
       }));
