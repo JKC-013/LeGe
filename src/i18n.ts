@@ -5,6 +5,7 @@ const resources = {
   zh: {
     translation: {
       "nav.home": "首頁",
+      "nav.songs": "詩歌",
       "nav.favourites": "收藏",
       "nav.publisher": "發布",
       "nav.admin": "管理員",
@@ -128,6 +129,7 @@ const resources = {
   vi: {
     translation: {
       "nav.home": "Trang chủ",
+      "nav.songs": "Bài hát",
       "nav.favourites": "Yêu thích",
       "nav.publisher": "Đăng bài",
       "nav.admin": "Quản trị viên",

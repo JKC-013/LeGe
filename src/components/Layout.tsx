@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
-import { Globe, LogOut, User as UserIcon, ChevronDown, Star, Mic, Mail } from 'lucide-react';
+import { Globe, LogOut, User as UserIcon, ChevronDown, Star, Mic, Mail, Book } from 'lucide-react';
 import { ChristianCross } from './ChristianCross';
 import { AuthModal } from './AuthModal';
 
@@ -122,6 +122,9 @@ export function Layout() {
             
             {currentUser ? (
               <div className="flex items-center space-x-2">
+                <Link to="/songs" className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all" title={t('nav.songs') || 'Songs'}>
+                  <Book className="w-5 h-5" />
+                </Link>
                 <Link to="/favourites" className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all" title={t('nav.favourites')}>
                   <Star className="w-5 h-5" />
                 </Link>
@@ -142,7 +145,8 @@ export function Layout() {
                   <button className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all flex items-center">
                     <UserIcon className="w-5 h-5" />
                   </button>
-                  <div className="absolute right-0 mt-2 w-48 bg-surface-container-lowest rounded-xl shadow-ambient border border-outline-variant/15 py-2 z-20 overflow-hidden hidden group-hover:block">
+                  <div className="absolute right-0 pt-2 w-48 z-20 hidden group-hover:block">
+                    <div className="bg-surface-container-lowest rounded-xl shadow-ambient border border-outline-variant/15 py-2 overflow-hidden">
                     <div className="px-4 py-2 border-b border-outline-variant/15 mb-1">
                       <p className="text-sm font-medium text-on-surface truncate">{currentUser.name || currentUser.email}</p>
                       <p className="text-xs text-on-surface-variant capitalize">{currentUser.role}</p>
@@ -164,6 +168,7 @@ export function Layout() {
                       <LogOut className="w-4 h-4 mr-2" />
                       {t('nav.logout')}
                     </button>
+                  </div>
                   </div>
                 </div>
               </div>
