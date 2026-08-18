@@ -1,15 +1,27 @@
 const fs = require('fs');
-let content = fs.readFileSync('src/pages/SongDetail.tsx', 'utf8');
+let content = fs.readFileSync('src/pages/PublisherDashboard.tsx', 'utf8');
 
-const targetSelect = `            <div className="relative">
-              <select 
-                value={selectedKey}
-                onChange={(e) => setSelectedKey(e.target.value)}`;
+const oldLogic = `  const selectSuggestion = (song: any) => {
+    setFormData({
+      ...formData,
+      title: song.title,
+      organization: song.organization || '',
+      category: song.category || 'Worship'
+    });
+    setShowSuggestions(false);
+  };`;
 
-const replacementSelect = `            <div className="relative">
-              <select 
-                value={(!song.keys || song.keys.length === 0 || !song.versions?.includes(selectedVersion)) ? "Empty" : selectedKey}
-                onChange={(e) => setSelectedKey(e.target.value)}`;
+const newLogic = `  const selectSuggestion = (song: any) => {
+    setFormData({
+      ...formData,
+      title: song.title,
+      organization: song.organization || '',
+      category: song.category || 'Worship',
+      lyrics: song.lyrics || ''
+    });
+    setShowSuggestions(false);
+  };`;
 
-content = content.replace(targetSelect, replacementSelect);
-fs.writeFileSync('src/pages/SongDetail.tsx', content);
+content = content.replace(oldLogic, newLogic);
+
+fs.writeFileSync('src/pages/PublisherDashboard.tsx', content);

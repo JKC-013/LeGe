@@ -1,15 +1,10 @@
 const fs = require('fs');
 let content = fs.readFileSync('src/i18n.ts', 'utf8');
 
-// Add translation keys for Home
+// The Chinese key is "詩歌名稱", not "歌曲名稱"
 content = content.replace(
-  '"home.page": "第 {{current}} / {{total}} 頁",',
-  '"home.page": "第 {{current}} / {{total}} 頁",\n      "home.goToAdminHub": "前往管理員中心",\n      "home.goToPublisherDashboard": "前往發布者儀表板",'
-);
-
-content = content.replace(
-  '"home.page": "Trang {{current}} / {{total}}",',
-  '"home.page": "Trang {{current}} / {{total}}",\n      "home.goToAdminHub": "Đến Trung tâm quản trị",\n      "home.goToPublisherDashboard": "Đến Bảng điều khiển người đăng",'
+  /"publisher\.songName": "詩歌名稱",/g,
+  '"publisher.songName": "詩歌名稱",\n      "publisher.searchHint": "(輸入以搜尋現有詩歌)",\n      "publisher.searchPlaceholder": "搜尋或輸入新詩歌名稱...",'
 );
 
 fs.writeFileSync('src/i18n.ts', content);

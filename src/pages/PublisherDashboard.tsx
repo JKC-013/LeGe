@@ -11,7 +11,8 @@ const PREDEFINED_KEYS = ['Dd', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A', 'E', '
 
 export function PublisherDashboard() {
   const { t } = useTranslation();
-  const { addSong } = useStore();
+  const { addSong, songs } = useStore();
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [success, setSuccess] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   
@@ -36,6 +37,23 @@ export function PublisherDashboard() {
   };
 
   
+
+  
+  const suggestions = songs.filter(s => s.status === 'approved' && s.title.toLowerCase().includes(formData.title.toLowerCase()) && formData.title.length > 0);
+  
+  // Create a unique list of suggestions by title to avoid duplicates
+  const uniqueSuggestions = Array.from(new Map(suggestions.map(s => [s.title, s])).values()).slice(0, 5);
+
+  const selectSuggestion = (song: any) => {
+    setFormData({
+      ...formData,
+      title: song.title,
+      organization: song.organization || '',
+      category: song.category || 'Worship',
+      lyrics: song.lyrics || ''
+    });
+    setShowSuggestions(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,9 +152,35 @@ export function PublisherDashboard() {
               </div>
             </div>
 
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-bold text-on-surface mb-2">{t('publisher.songName')}</label>
-              <input required type="text" className="block w-full bg-surface-container-highest border-b-2 border-transparent focus:border-primary rounded-t-xl rounded-b-sm py-3 px-4 focus:outline-none focus:ring-0 text-base transition-colors text-on-surface" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            <div className="sm:col-span-2 relative">
+              <label className="block text-sm font-bold text-on-surface mb-2">{t('publisher.songName')} <span className="text-xs font-normal text-on-surface-variant ml-2">{t('publisher.searchHint')}</span></label>
+              <input 
+                required 
+                type="text" 
+                className="block w-full bg-surface-container-highest border-b-2 border-transparent focus:border-primary rounded-t-xl rounded-b-sm py-3 px-4 focus:outline-none focus:ring-0 text-base transition-colors text-on-surface" 
+                value={formData.title} 
+                onChange={e => {
+                  setFormData({...formData, title: e.target.value});
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                placeholder={t("publisher.searchPlaceholder")}
+              />
+              {showSuggestions && uniqueSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-surface-container shadow-lg rounded-xl overflow-hidden border border-outline-variant/30">
+                  {uniqueSuggestions.map(song => (
+                    <div 
+                      key={song.id} 
+                      className="px-4 py-3 cursor-pointer hover:bg-surface-container-highest transition-colors border-b border-outline-variant/10 last:border-0"
+                      onMouseDown={(e) => { e.preventDefault(); selectSuggestion(song); }}
+                    >
+                      <div className="font-bold text-on-surface">{song.title}</div>
+                      <div className="text-xs text-on-surface-variant">{song.organization} • {song.category === "Worship" ? t("song.worship") : t("song.others")}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
