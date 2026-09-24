@@ -27,6 +27,8 @@ export interface Song {
   status: 'pending' | 'approved';
   created_by?: string;
   approval_count: number;
+  isNewVersion?: boolean;
+  existingSongTitle?: string;
 }
 
 export interface ServiceRequest {
@@ -200,82 +202,49 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentUser) return;
     
     const cleanTitle = songData.title.trim();
-    // Check if a song with this title already exists (case-insensitive)
-    const existingSong = songs.find(s => s.title.trim().toLowerCase() === cleanTitle.toLowerCase());
+    // Check if an approved song with this title already exists (case-insensitive)
+    const existingSong = songs.find(s => s.status === 'approved' && s.title.trim().toLowerCase() === cleanTitle.toLowerCase());
 
     if (existingSong) {
-      // Merge versions and keys inside the existing song
-      const mergedVersions = Array.from(new Set([...(existingSong.versions || []), ...(songData.versions || [])]));
-      const mergedKeys = Array.from(new Set([...(existingSong.keys || []), ...(songData.keys || [])]));
-
-      const existingParsed = parseSongPdfs(existingSong.pdfUrl, existingSong.versions);
-      const incomingParsed = parseSongPdfs(songData.pdfUrl, songData.versions);
-
-      const mergedVersionPdfs = {
-        ...existingParsed.versionPdfs,
-        ...incomingParsed.versionPdfs
-      };
-      const mergedVersionKeys = {
-        ...existingParsed.versionKeys,
-        ...incomingParsed.versionKeys
-      };
-
-      // Ensure incoming versions map to the uploaded PDF and key
-      if (songData.versions && songData.versions.length > 0) {
-        for (const v of songData.versions) {
-          if (songData.pdfUrl && !songData.pdfUrl.startsWith('{')) {
-            mergedVersionPdfs[v] = songData.pdfUrl;
-          }
-          if (songData.keys && songData.keys.length > 0) {
-            mergedVersionKeys[v] = songData.keys[0];
-          }
-        }
-      }
-
-      const serializedPdf = serializeSongPdfs(
-        mergedVersionPdfs,
-        mergedVersionKeys,
-        existingParsed.defaultPdf || songData.pdfUrl
-      );
+      // Keep existingSong and all its previous versions completely untouched and approved!
+      // Add a pending submission for the new version:
+      const parsed = parseSongPdfs(songData.pdfUrl, songData.versions);
+      const serializedPdf = serializeSongPdfs(parsed.versionPdfs, parsed.versionKeys, songData.pdfUrl);
 
       if (!isSupabaseConfigured) {
-        set({
-          songs: songs.map(s => s.id === existingSong.id ? {
-            ...s,
-            versions: mergedVersions,
-            keys: mergedKeys,
-            pdfUrl: serializedPdf,
-            versionPdfs: mergedVersionPdfs,
-            versionKeys: mergedVersionKeys,
-            lyrics: songData.lyrics || s.lyrics,
-            thumbnailUrl: songData.thumbnailUrl || s.thumbnailUrl,
-            organization: songData.organization || s.organization,
-            category: songData.category || s.category,
-            status: 'pending'
-          } : s)
-        });
+        const pendingVersionSubmission: Song = {
+          ...songData,
+          id: Date.now().toString(),
+          pdfUrl: serializedPdf,
+          versionPdfs: parsed.versionPdfs,
+          versionKeys: parsed.versionKeys,
+          status: 'pending',
+          created_by: currentUser.id,
+          approval_count: 0,
+          isNewVersion: true,
+          existingSongTitle: existingSong.title
+        };
+        set({ songs: [...songs, pendingVersionSubmission] });
         return;
       }
 
-      const updatePayload: any = {
-        versions: mergedVersions,
-        keys: mergedKeys,
-        pdf_url: serializedPdf,
+      const pendingRow = {
+        title: existingSong.title,
         organization: songData.organization || existingSong.organization,
         category: songData.category || existingSong.category,
-        status: 'pending'
+        pdf_url: serializedPdf,
+        thumbnail_url: songData.thumbnailUrl || existingSong.thumbnailUrl,
+        lyrics: songData.lyrics || existingSong.lyrics,
+        versions: songData.versions,
+        keys: songData.keys,
+        status: 'pending',
+        created_by: currentUser.id
       };
-      if (songData.lyrics) updatePayload.lyrics = songData.lyrics;
-      if (songData.thumbnailUrl) updatePayload.thumbnail_url = songData.thumbnailUrl;
 
-      const { error: updateError } = await supabase
-        .from('songs')
-        .update(updatePayload)
-        .eq('id', existingSong.id);
-
-      if (updateError) {
-        console.error('Error updating existing song with new version:', updateError);
-        throw updateError;
+      const { error: insertError } = await supabase.from('songs').insert([pendingRow]);
+      if (insertError) {
+        console.error('Error inserting pending version:', insertError);
+        throw insertError;
       }
 
       if (currentUser.role !== 'admin') {
@@ -284,7 +253,7 @@ export const useStore = create<AppState>((set, get) => ({
           for (const admin of admins) {
             await supabase.from('notifications').insert({
               user_id: admin.id,
-              message: `New version "${songData.versions.join(', ')}" added to "${existingSong.title}"`,
+              message: `New version "${songData.versions.join(', ')}" submitted for "${existingSong.title}"`,
               read: false
             });
           }
@@ -397,18 +366,116 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
   approveSong: async (songId) => {
-    if (!isSupabaseConfigured) return;
-    
+    const pendingItem = get().songs.find(s => s.id === songId);
+
+    if (!isSupabaseConfigured) {
+      if (pendingItem?.isNewVersion) {
+        const approvedSong = get().songs.find(s => s.status === 'approved' && s.title.trim().toLowerCase() === pendingItem.title.trim().toLowerCase());
+        if (approvedSong) {
+          const mergedVersions = Array.from(new Set([...approvedSong.versions, ...pendingItem.versions]));
+          const mergedKeys = Array.from(new Set([...approvedSong.keys, ...pendingItem.keys]));
+          const mergedPdfs = { ...approvedSong.versionPdfs, ...pendingItem.versionPdfs };
+          const mergedVKeys = { ...approvedSong.versionKeys, ...pendingItem.versionKeys };
+          set({
+            songs: get().songs.filter(s => s.id !== songId).map(s => s.id === approvedSong.id ? {
+              ...s,
+              versions: mergedVersions,
+              keys: mergedKeys,
+              versionPdfs: mergedPdfs,
+              versionKeys: mergedVKeys,
+              pdfUrl: serializeSongPdfs(mergedPdfs, mergedVKeys, s.pdfUrl)
+            } : s)
+          });
+          return;
+        }
+      } else {
+        set({
+          songs: get().songs.map(s => s.id === songId ? { ...s, status: 'approved' } : s)
+        });
+        return;
+      }
+    }
+
+    if (pendingItem?.isNewVersion) {
+      // Find existing approved song
+      const approvedSong = get().songs.find(s => s.status === 'approved' && s.title.trim().toLowerCase() === pendingItem.title.trim().toLowerCase());
+      if (approvedSong) {
+        const mergedVersions = Array.from(new Set([...(approvedSong.versions || []), ...(pendingItem.versions || [])]));
+        const mergedKeys = Array.from(new Set([...(approvedSong.keys || []), ...(pendingItem.keys || [])]));
+
+        const approvedParsed = parseSongPdfs(approvedSong.pdfUrl, approvedSong.versions);
+        const pendingParsed = parseSongPdfs(pendingItem.pdfUrl, pendingItem.versions);
+
+        const mergedVersionPdfs = {
+          ...approvedParsed.versionPdfs,
+          ...pendingParsed.versionPdfs
+        };
+        const mergedVersionKeys = {
+          ...approvedParsed.versionKeys,
+          ...pendingParsed.versionKeys
+        };
+
+        if (pendingItem.versions && pendingItem.versions.length > 0) {
+          for (const v of pendingItem.versions) {
+            if (pendingItem.pdfUrl && !pendingItem.pdfUrl.startsWith('{')) {
+              mergedVersionPdfs[v] = pendingItem.pdfUrl;
+            }
+            if (pendingItem.keys && pendingItem.keys.length > 0) {
+              mergedVersionKeys[v] = pendingItem.keys[0];
+            }
+          }
+        }
+
+        const serializedPdf = serializeSongPdfs(
+          mergedVersionPdfs,
+          mergedVersionKeys,
+          approvedParsed.defaultPdf || pendingItem.pdfUrl
+        );
+
+        // Update the approved song in Supabase
+        const { error: updateError } = await supabase
+          .from('songs')
+          .update({
+            versions: mergedVersions,
+            keys: mergedKeys,
+            pdf_url: serializedPdf
+          })
+          .eq('id', approvedSong.id);
+
+        if (updateError) {
+          console.error('Error approving version into existing song:', updateError);
+        }
+
+        // Delete the pending submission row
+        await supabase
+          .from('songs')
+          .delete()
+          .eq('id', songId);
+
+        if (pendingItem.created_by) {
+          await supabase.from('notifications').insert({
+            user_id: pendingItem.created_by,
+            message: `Your version "${pendingItem.versions.join(', ')}" for "${approvedSong.title}" has been approved!`,
+            type: 'approval',
+            read: false
+          });
+        }
+
+        await get().fetchSongs();
+        return;
+      }
+    }
+
+    // Brand new song approval
     await supabase
       .from('songs')
       .update({ status: 'approved' })
       .eq('id', songId);
       
-    const song = get().songs.find(s => s.id === songId);
-    if (song && song.created_by) {
+    if (pendingItem && pendingItem.created_by) {
       await supabase.from('notifications').insert({
-        user_id: song.created_by,
-        message: `Your song "${song.title}" has been approved!`,
+        user_id: pendingItem.created_by,
+        message: `Your song "${pendingItem.title}" has been approved!`,
         type: 'approval',
         read: false
       });
@@ -622,15 +689,19 @@ export const useStore = create<AppState>((set, get) => ({
         const brokenIds = ['ffa8ee96-7ab8-4eec-b7ec-0e6e53467865', '6f5eb876-9838-40be-a4e6-eff146f677df'];
         const validSongsData = songsData.filter(s => !brokenIds.includes(s.id));
         
-        // Consolidate songs by title so versions and keys are grouped into one song
-        const songMap = new Map<string, Song>();
+        // 1. Separate approved rows and pending rows
+        const approvedRows = validSongsData.filter(s => s.status === 'approved');
+        const pendingRows = validSongsData.filter(s => s.status === 'pending');
 
-        for (const s of validSongsData) {
+        // Consolidate approved songs by title so all approved versions stay in one song and remain approved!
+        const approvedSongMap = new Map<string, Song>();
+
+        for (const s of approvedRows) {
           const parsed = parseSongPdfs(s.pdf_url || '', s.versions || []);
           const normalizedTitle = (s.title || 'Untitled').trim().toLowerCase();
           
-          if (songMap.has(normalizedTitle)) {
-            const existing = songMap.get(normalizedTitle)!;
+          if (approvedSongMap.has(normalizedTitle)) {
+            const existing = approvedSongMap.get(normalizedTitle)!;
             const mergedVersions = Array.from(new Set([...existing.versions, ...(s.versions || [])]));
             const mergedKeys = Array.from(new Set([...existing.keys, ...(s.keys || [])]));
             const mergedVersionPdfs = { ...existing.versionPdfs, ...parsed.versionPdfs };
@@ -647,10 +718,9 @@ export const useStore = create<AppState>((set, get) => ({
               });
             }
 
-            const isPending = existing.status === 'pending' || s.status === 'pending';
-            songMap.set(normalizedTitle, {
+            approvedSongMap.set(normalizedTitle, {
               ...existing,
-              status: isPending ? 'pending' : 'approved',
+              status: 'approved',
               versions: mergedVersions,
               keys: mergedKeys,
               versionPdfs: mergedVersionPdfs,
@@ -660,7 +730,7 @@ export const useStore = create<AppState>((set, get) => ({
               thumbnailUrl: existing.thumbnailUrl || s.thumbnail_url || undefined
             });
           } else {
-            songMap.set(normalizedTitle, {
+            approvedSongMap.set(normalizedTitle, {
               id: s.id,
               title: s.title || 'Untitled',
               organization: s.organization || s.author || '',
@@ -670,15 +740,41 @@ export const useStore = create<AppState>((set, get) => ({
               versionKeys: parsed.versionKeys,
               thumbnailUrl: s.thumbnail_url || undefined,
               lyrics: s.lyrics || '',
-              status: (s.status as 'pending' | 'approved') || 'pending',
+              status: 'approved',
               keys: s.keys || [],
               versions: s.versions || [],
-              approval_count: s.approval_count || 0
+              approval_count: s.approval_count || 0,
+              created_by: s.created_by
             });
           }
         }
 
-        const formattedSongs: Song[] = Array.from(songMap.values());
+        // 2. Format pending submissions
+        const pendingSubmissions: Song[] = pendingRows.map(p => {
+          const parsed = parseSongPdfs(p.pdf_url || '', p.versions || []);
+          const normalizedTitle = (p.title || 'Untitled').trim().toLowerCase();
+          const hasExistingApproved = approvedSongMap.has(normalizedTitle);
+          return {
+            id: p.id,
+            title: p.title || 'Untitled',
+            organization: p.organization || p.author || '',
+            category: p.category || 'Worship',
+            pdfUrl: p.pdf_url || '',
+            versionPdfs: parsed.versionPdfs,
+            versionKeys: parsed.versionKeys,
+            thumbnailUrl: p.thumbnail_url || undefined,
+            lyrics: p.lyrics || '',
+            status: 'pending' as const,
+            keys: p.keys || [],
+            versions: p.versions || [],
+            approval_count: p.approval_count || 0,
+            created_by: p.created_by,
+            isNewVersion: hasExistingApproved,
+            existingSongTitle: hasExistingApproved ? approvedSongMap.get(normalizedTitle)!.title : undefined
+          };
+        });
+
+        const formattedSongs: Song[] = [...Array.from(approvedSongMap.values()), ...pendingSubmissions];
         console.log('Formatted songs:', formattedSongs);
         set({ songs: formattedSongs });
       }

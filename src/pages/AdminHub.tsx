@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore, Song } from '../store';
-import { Users, FileCheck, Database, Search, Check, X, Trash2, Edit, BarChart3, Download, ArrowLeft } from 'lucide-react';
+import { Users, FileCheck, Database, Search, Check, X, Trash2, Edit, BarChart3, Download, ArrowLeft, FileText, PlusCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { EditSongModal } from '../components/EditSongModal';
+import { ScoreTabManager } from '../components/ScoreTabManager';
 
 export function AdminHub() {
   const { t } = useTranslation();
@@ -12,7 +12,6 @@ export function AdminHub() {
   const [searchQuery, setSearchQuery] = useState('');
   
   const [editingSong, setEditingSong] = useState<Song | null>(null);
-  const [songSearchQuery, setSongSearchQuery] = useState('');
 
   const safeQuery = (searchQuery || '').trim().toLowerCase();
   const filteredUsers = users.filter(u => {
@@ -22,18 +21,6 @@ export function AdminHub() {
   });
   const pendingSongs = songs.filter(s => s.status === 'pending');
   const approvedSongs = songs.filter(s => s.status === 'approved');
-
-  const safeSongQuery = (songSearchQuery || '').trim().toLowerCase();
-  const filteredApprovedSongs = approvedSongs.filter(s => {
-    if (!safeSongQuery) return true;
-    return s.title.toLowerCase().includes(safeSongQuery) || (s.organization && s.organization.toLowerCase().includes(safeSongQuery));
-  });
-
-  const handleSaveEdit = async (updates: Partial<Song>) => {
-    if (editingSong) {
-      await editSong(editingSong.id, updates);
-    }
-  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -155,19 +142,66 @@ export function AdminHub() {
             ) : (
               <div className="space-y-4">
                 {pendingSongs.map(song => (
-                  <div key={song.id} className="flex items-center justify-between p-4 border border-outline-variant/15 rounded-xl bg-surface">
-                    <div>
-                      <h4 className="text-lg font-bold text-on-surface">{song.title}</h4>
-                      <p className="text-sm text-on-surface-variant">{song.organization} &bull; {song.category}</p>
+                  <div key={song.id} className="p-4 sm:p-5 border border-outline-variant/15 rounded-2xl bg-surface flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-lg font-bold text-on-surface">{song.title}</h4>
+                        {song.isNewVersion ? (
+                          <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold border border-primary/20">
+                            New Version: {song.versions?.join(', ')}
+                          </span>
+                        ) : (
+                          <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 font-bold border border-amber-500/20">
+                            New Song
+                          </span>
+                        )}
+                        <span className="text-xs px-2 py-0.5 rounded-md bg-surface-container font-mono text-on-surface-variant">
+                          Key: {song.keys?.join(', ')}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-on-surface-variant">
+                        {song.organization} &bull; {song.category}
+                      </p>
+
+                      {song.pdfUrl && (
+                        <div className="pt-1">
+                          <a 
+                            href={song.pdfUrl} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>View Submitted Sheet</span>
+                          </a>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex space-x-2">
-                      <button onClick={() => setEditingSong(song)} className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors" title={t('admin.edit')}>
+
+                    <div className="flex items-center space-x-2 shrink-0 self-end sm:self-center">
+                      <button 
+                        onClick={() => {
+                          setEditingSong(song);
+                          setActiveTab('score');
+                        }} 
+                        className="p-2 text-on-surface-variant hover:bg-surface-container rounded-xl transition-colors" 
+                        title={t('admin.edit')}
+                      >
                         <Edit className="w-5 h-5" />
                       </button>
-                      <button onClick={() => approveSong(song.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors shadow-sm" title={t('admin.approve')}>
+                      <button 
+                        onClick={() => approveSong(song.id)} 
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-xl transition-colors shadow-sm" 
+                        title={song.isNewVersion ? "Approve this version" : t('admin.approve')}
+                      >
                         <Check className="w-5 h-5" />
                       </button>
-                      <button onClick={() => declineSong(song.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors shadow-sm" title={t('admin.decline')}>
+                      <button 
+                        onClick={() => declineSong(song.id)} 
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors shadow-sm" 
+                        title={song.isNewVersion ? "Decline this version" : t('admin.decline')}
+                      >
                         <X className="w-5 h-5" />
                       </button>
                     </div>
@@ -179,71 +213,11 @@ export function AdminHub() {
         )}
 
         {activeTab === 'score' && (
-          <div className="p-6 space-y-6">
-            <div className="relative">
-              <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant" />
-              <input
-                type="text"
-                value={songSearchQuery}
-                onChange={e => setSongSearchQuery(e.target.value)}
-                placeholder={t('admin.searchSongPlaceholder')}
-                className="w-full bg-surface pl-11 pr-4 py-3 rounded-xl border border-outline-variant/20 focus:border-primary focus:outline-none text-sm text-on-surface"
-              />
-            </div>
-
-            {filteredApprovedSongs.length === 0 ? (
-              <div className="text-center py-12 text-outline-variant text-base">
-                {t('home.empty')}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredApprovedSongs.map(song => (
-                  <div key={song.id} className="p-4 sm:p-5 border border-outline-variant/15 rounded-2xl bg-surface flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-lg font-bold text-on-surface">{song.title}</h4>
-                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-surface-container font-normal text-on-surface-variant">
-                          {song.category}
-                        </span>
-                      </div>
-                      <p className="text-xs text-on-surface-variant">
-                        {song.organization}
-                      </p>
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {song.versions?.map(v => (
-                          <span key={v} className="text-[11px] px-2 py-0.5 bg-surface-container rounded-md font-medium text-on-surface-variant">
-                            v: {v}
-                          </span>
-                        ))}
-                        {song.keys?.map(k => (
-                          <span key={k} className="text-[11px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-md font-mono font-medium">
-                            Key: {k}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2 shrink-0 self-end sm:self-center">
-                      <button 
-                        onClick={() => setEditingSong(song)} 
-                        className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition-colors flex items-center shadow-sm"
-                        title={t('admin.edit')}
-                      >
-                        <Edit className="w-4 h-4 mr-1.5" />
-                        <span>{t('admin.edit')}</span>
-                      </button>
-                      <button 
-                        onClick={() => deleteSong(song.id)} 
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors" 
-                        title={t('admin.delete')}
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          <div className="p-6">
+            <ScoreTabManager 
+              initialSongId={editingSong?.id} 
+              onClearInitialSongId={() => setEditingSong(null)} 
+            />
           </div>
         )}
 
@@ -270,13 +244,6 @@ export function AdminHub() {
           </div>
         )}
       </div>
-
-      <EditSongModal 
-        song={editingSong} 
-        isOpen={!!editingSong} 
-        onClose={() => setEditingSong(null)} 
-        onSave={handleSaveEdit} 
-      />
     </div>
   );
 }

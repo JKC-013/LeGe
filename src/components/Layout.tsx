@@ -151,7 +151,7 @@ export function Layout() {
                   >
                     <UserIcon className="w-5 h-5" />
                     {hasAdminNotification && (
-                      <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-error rounded-full ring-2 ring-surface"></span>
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-surface animate-pulse"></span>
                     )}
                   </button>
                   <div className="absolute right-0 pt-2 w-48 z-20 hidden group-hover:block">

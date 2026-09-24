@@ -14,6 +14,8 @@
   --color-on-surface: #1c1c17;
   --color-on-surface-variant: #454847;
   --color-outline-variant: #bdc9c8;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
 
   --font-display: "Be Vietnam Pro", "Noto Sans TC", sans-serif;
   --font-sans: "Inter", "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
