@@ -301,8 +301,8 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
         {activeSong && (
           <div className="flex items-center space-x-2 text-xs text-on-surface-variant font-mono bg-surface px-3 py-1.5 rounded-xl border border-outline-variant/15">
             <span className="font-sans font-medium text-on-surface">{activeSong.title}</span>
-            {selectedVersion && <span>&bull; v: {selectedVersion}</span>}
-            {selectedKey && <span>&bull; key: {selectedKey}</span>}
+            {selectedVersion && <span>&bull; {t('song.version')}: {selectedVersion}</span>}
+            {selectedKey && <span>&bull; {t('song.key')}: {selectedKey}</span>}
           </div>
         )}
       </div>
@@ -398,7 +398,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
                     </span>
                   </div>
                   <p className="text-xs text-on-surface-variant">
-                    {activeSong.organization || 'No organization'}
+                    {activeSong.organization || t('song.empty')}
                   </p>
                 </div>
 
@@ -420,7 +420,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
 
                 {(!activeSong.versions || activeSong.versions.length === 0) ? (
                   <div className="p-6 text-center text-xs text-on-surface-variant border border-dashed border-outline-variant/30 rounded-2xl">
-                    No versions listed for this song.
+                    {t('editSong.noVersions')}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -526,7 +526,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
 
             {getKeysForVersion(selectedVersion).length === 0 ? (
               <div className="p-6 text-center text-xs text-on-surface-variant border border-dashed border-outline-variant/30 rounded-2xl">
-                No keys found for this version.
+                {t('editSong.noKeys')}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -539,7 +539,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
                       <span className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-mono font-bold text-sm">
                         {keyVal}
                       </span>
-                      <span className="text-xs font-medium text-on-surface">Key {keyVal}</span>
+                      <span className="text-xs font-medium text-on-surface">{t('song.key')} {keyVal}</span>
                     </div>
 
                     <div className="flex items-center space-x-1.5">
@@ -547,7 +547,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
                       <button
                         onClick={() => setConfirmDelete({ type: 'key', target: keyVal })}
                         className="p-2 text-red-600 hover:bg-red-500/10 rounded-xl transition-colors"
-                        title={`${t('admin.delete')} Key ${keyVal}`}
+                        title={`${t('admin.delete')} ${t('song.key')} ${keyVal}`}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -585,7 +585,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
               </button>
               <div>
                 <h3 className="text-lg font-bold text-on-surface">
-                  {formData.title} &bull; <span className="text-primary">{selectedVersion}</span> (Key: {selectedKey})
+                  {formData.title} &bull; <span className="text-primary">{selectedVersion}</span> ({t('song.key')}: {selectedKey})
                 </h3>
                 <p className="text-xs text-on-surface-variant">{t('editSong.step3Desc')}</p>
               </div>
@@ -638,7 +638,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
                 {newPdfFile && (
                   <div className="flex items-center justify-center space-x-2 text-xs text-green-600 bg-green-50 p-2 rounded-xl">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>File ready to replace: {newPdfFile.name}</span>
+                    <span>{t('editSong.readyToReplace')}: {newPdfFile.name}</span>
                   </div>
                 )}
               </div>
@@ -648,7 +648,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
                 <div className="text-xs text-on-surface-variant flex items-center justify-between p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/15">
                   <div className="flex items-center space-x-2 truncate">
                     <FileText className="w-4 h-4 text-outline-variant shrink-0" />
-                    <span className="truncate">Current Sheet: {selectedVersion}</span>
+                    <span className="truncate">{t('editSong.currentSheet')}: {selectedVersion}</span>
                   </div>
                   <a 
                     href={parsed.versionPdfs[selectedVersion]} 
@@ -656,7 +656,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
                     rel="noreferrer"
                     className="text-primary hover:underline font-bold text-xs shrink-0 ml-2"
                   >
-                    View
+                    {t('editSong.viewSheet')}
                   </a>
                 </div>
               )}
@@ -698,10 +698,10 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
                       onChange={e => setFormData({ ...formData, category: e.target.value })}
                       className="w-full bg-surface-container/40 border border-outline-variant/20 rounded-xl px-3.5 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
                     >
-                      <option value="Worship">Worship</option>
-                      <option value="Praise">Praise</option>
-                      <option value="Hymn">Hymn</option>
-                      <option value="Contemporary">Contemporary</option>
+                      <option value="Worship">{t('song.worship')}</option>
+                      <option value="Praise">{t('song.worship') === 'Thờ phượng' ? 'Khen ngợi' : '讚美'}</option>
+                      <option value="Hymn">{t('song.worship') === 'Thờ phượng' ? 'Thánh ca' : '聖詩'}</option>
+                      <option value="Contemporary">{t('song.others')}</option>
                     </select>
                   </div>
                 </div>
@@ -738,7 +738,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
                     value={formData.lyrics}
                     onChange={e => setFormData({ ...formData, lyrics: e.target.value })}
                     className="w-full bg-surface-container/40 border border-outline-variant/20 rounded-xl p-3 text-xs text-on-surface focus:outline-none focus:border-primary font-sans"
-                    placeholder="Enter song lyrics..."
+                    placeholder={t('publisher.lyrics')}
                   />
                 </div>
               </div>
@@ -752,7 +752,7 @@ export function ScoreTabManager({ initialSongId, onClearInitialSongId }: ScoreTa
               className="px-5 py-2.5 rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-colors flex items-center"
             >
               <ArrowLeft className="w-4 h-4 mr-1.5" />
-              <span>Back to Keys</span>
+              <span>{t('editSong.backToKeys')}</span>
             </button>
 
             <button

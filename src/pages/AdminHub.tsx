@@ -148,15 +148,15 @@ export function AdminHub() {
                         <h4 className="text-lg font-bold text-on-surface">{song.title}</h4>
                         {song.isNewVersion ? (
                           <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-bold border border-primary/20">
-                            New Version: {song.versions?.join(', ')}
+                            {t('admin.newVersion')}: {song.versions?.join(', ')}
                           </span>
                         ) : (
                           <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 font-bold border border-amber-500/20">
-                            New Song
+                            {t('admin.newSong')}
                           </span>
                         )}
                         <span className="text-xs px-2 py-0.5 rounded-md bg-surface-container font-mono text-on-surface-variant">
-                          Key: {song.keys?.join(', ')}
+                          {t('song.key')}: {song.keys?.join(', ')}
                         </span>
                       </div>
 
@@ -173,7 +173,7 @@ export function AdminHub() {
                             className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-medium"
                           >
                             <FileText className="w-3.5 h-3.5" />
-                            <span>View Submitted Sheet</span>
+                            <span>{t('admin.viewSubmittedSheet')}</span>
                           </a>
                         </div>
                       )}
@@ -193,14 +193,14 @@ export function AdminHub() {
                       <button 
                         onClick={() => approveSong(song.id)} 
                         className="p-2 text-green-600 hover:bg-green-50 rounded-xl transition-colors shadow-sm" 
-                        title={song.isNewVersion ? "Approve this version" : t('admin.approve')}
+                        title={song.isNewVersion ? t('admin.approveVersion') : t('admin.approve')}
                       >
                         <Check className="w-5 h-5" />
                       </button>
                       <button 
                         onClick={() => declineSong(song.id)} 
                         className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors shadow-sm" 
-                        title={song.isNewVersion ? "Decline this version" : t('admin.decline')}
+                        title={song.isNewVersion ? t('admin.declineVersion') : t('admin.decline')}
                       >
                         <X className="w-5 h-5" />
                       </button>
