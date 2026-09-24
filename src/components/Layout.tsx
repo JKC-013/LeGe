@@ -12,6 +12,9 @@ export function Layout() {
   const navigate = useNavigate();
   const requestQueue = useStore(state => state.requestQueue);
   const pendingSongsCount = useStore(state => state.songs.filter(s => s.status === 'pending').length);
+  const notifications = useStore(state => state.notifications);
+  const unreadNotificationsCount = notifications.filter(n => n.user_id === currentUser?.id && !n.read).length;
+  const hasAdminNotification = currentUser?.role === 'admin' && (pendingSongsCount > 0 || unreadNotificationsCount > 0);
   const [langOpen, setLangOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
@@ -136,14 +139,20 @@ export function Layout() {
                 </Link>
                 <Link to="/notifications" className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all relative" title={t('nav.notifications')}>
                   <Mail className="w-5 h-5" />
-                  {currentUser?.role === 'admin' && pendingSongsCount > 0 && (
+                  {unreadNotificationsCount > 0 && (
                     <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-error rounded-full"></span>
                   )}
                 </Link>
 
                 <div className="relative group ml-2">
-                  <button className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all flex items-center">
+                  <button 
+                    className="text-on-surface-variant hover:text-primary hover:bg-surface-container p-2.5 rounded-full transition-all flex items-center relative"
+                    aria-label="Account"
+                  >
                     <UserIcon className="w-5 h-5" />
+                    {hasAdminNotification && (
+                      <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-error rounded-full ring-2 ring-surface"></span>
+                    )}
                   </button>
                   <div className="absolute right-0 pt-2 w-48 z-20 hidden group-hover:block">
                     <div className="bg-surface-container-lowest rounded-xl shadow-ambient border border-outline-variant/15 py-2 overflow-hidden">
@@ -152,8 +161,11 @@ export function Layout() {
                       <p className="text-xs text-on-surface-variant capitalize">{currentUser.role}</p>
                     </div>
                     {currentUser.role === 'admin' && (
-                      <Link to="/admin" className="block px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
-                        {t('nav.admin')}
+                      <Link to="/admin" className="flex items-center justify-between px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
+                        <span>{t('nav.admin')}</span>
+                        {hasAdminNotification && (
+                          <span className="w-2 h-2 rounded-full bg-error"></span>
+                        )}
                       </Link>
                     )}
                     {(currentUser.role === 'collaborator' || currentUser.role === 'admin') && (

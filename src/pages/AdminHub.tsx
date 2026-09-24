@@ -151,7 +151,11 @@ export function AdminHub() {
                   <div key={song.id} className="flex items-center justify-between p-4 border border-outline-variant/15 rounded-xl bg-surface">
                     <div>
                       <h4 className="text-lg font-bold text-on-surface">{song.title}</h4>
-                      <p className="text-sm text-on-surface-variant">{song.organization} &bull; {song.category}</p>
+                      <p className="text-sm text-on-surface-variant">
+                        {song.organization} &bull; {song.category}
+                        {song.versions && song.versions.length > 0 && ` • Version: ${song.versions.join(', ')}`}
+                        {song.keys && song.keys.length > 0 && ` • Key: ${song.keys.join(', ')}`}
+                      </p>
                     </div>
                     <div className="flex space-x-2">
                       <button onClick={() => setEditingSong(song)} className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors" title={t('admin.edit')}>
@@ -178,7 +182,11 @@ export function AdminHub() {
                 <div key={song.id} className="flex items-center justify-between p-4 border border-outline-variant/15 rounded-xl bg-surface">
                   <div>
                     <h4 className="text-lg font-bold text-on-surface">{song.title}</h4>
-                    <p className="text-sm text-on-surface-variant">{song.organization} &bull; {song.category}</p>
+                    <p className="text-sm text-on-surface-variant">
+                      {song.organization} &bull; {song.category}
+                      {song.versions && song.versions.length > 0 && ` • Version: ${song.versions.join(', ')}`}
+                      {song.keys && song.keys.length > 0 && ` • Key: ${song.keys.join(', ')}`}
+                    </p>
                   </div>
                   <div className="flex space-x-2">
                     <button onClick={() => setEditingSong(song)} className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors" title={t('admin.edit')}>

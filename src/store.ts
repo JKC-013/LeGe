@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { parseSongPdfs, serializeSongPdfs } from './lib/songHelpers';
 
 export type UserRole = 'user' | 'pastor' | 'collaborator' | 'admin' | 'publisher';
 
@@ -16,9 +17,11 @@ export interface Song {
   title: string;
   organization: string;
   category: string;
-  versions: string[]; // e.g. Mandarin, Cantonese, Vietnamese
+  versions: string[]; // e.g. Mandarin, Cantonese, Vietnamese, 1.1
   keys: string[];
   pdfUrl: string;
+  versionPdfs?: Record<string, string>;
+  versionKeys?: Record<string, string>;
   thumbnailUrl?: string;
   lyrics?: string;
   status: 'pending' | 'approved';
@@ -194,11 +197,112 @@ export const useStore = create<AppState>((set, get) => ({
     const { currentUser, songs } = get();
     if (!currentUser) return;
     
+    const cleanTitle = songData.title.trim();
+    // Check if a song with this title already exists (case-insensitive)
+    const existingSong = songs.find(s => s.title.trim().toLowerCase() === cleanTitle.toLowerCase());
+
+    if (existingSong) {
+      // Merge versions and keys inside the existing song
+      const mergedVersions = Array.from(new Set([...(existingSong.versions || []), ...(songData.versions || [])]));
+      const mergedKeys = Array.from(new Set([...(existingSong.keys || []), ...(songData.keys || [])]));
+
+      const existingParsed = parseSongPdfs(existingSong.pdfUrl, existingSong.versions);
+      const incomingParsed = parseSongPdfs(songData.pdfUrl, songData.versions);
+
+      const mergedVersionPdfs = {
+        ...existingParsed.versionPdfs,
+        ...incomingParsed.versionPdfs
+      };
+      const mergedVersionKeys = {
+        ...existingParsed.versionKeys,
+        ...incomingParsed.versionKeys
+      };
+
+      // Ensure incoming versions map to the uploaded PDF and key
+      if (songData.versions && songData.versions.length > 0) {
+        for (const v of songData.versions) {
+          if (songData.pdfUrl && !songData.pdfUrl.startsWith('{')) {
+            mergedVersionPdfs[v] = songData.pdfUrl;
+          }
+          if (songData.keys && songData.keys.length > 0) {
+            mergedVersionKeys[v] = songData.keys[0];
+          }
+        }
+      }
+
+      const serializedPdf = serializeSongPdfs(
+        mergedVersionPdfs,
+        mergedVersionKeys,
+        existingParsed.defaultPdf || songData.pdfUrl
+      );
+
+      if (!isSupabaseConfigured) {
+        set({
+          songs: songs.map(s => s.id === existingSong.id ? {
+            ...s,
+            versions: mergedVersions,
+            keys: mergedKeys,
+            pdfUrl: serializedPdf,
+            versionPdfs: mergedVersionPdfs,
+            versionKeys: mergedVersionKeys,
+            lyrics: songData.lyrics || s.lyrics,
+            thumbnailUrl: songData.thumbnailUrl || s.thumbnailUrl,
+            organization: songData.organization || s.organization,
+            category: songData.category || s.category
+          } : s)
+        });
+        return;
+      }
+
+      const updatePayload: any = {
+        versions: mergedVersions,
+        keys: mergedKeys,
+        pdf_url: serializedPdf,
+        organization: songData.organization || existingSong.organization,
+        category: songData.category || existingSong.category
+      };
+      if (songData.lyrics) updatePayload.lyrics = songData.lyrics;
+      if (songData.thumbnailUrl) updatePayload.thumbnail_url = songData.thumbnailUrl;
+
+      const { error: updateError } = await supabase
+        .from('songs')
+        .update(updatePayload)
+        .eq('id', existingSong.id);
+
+      if (updateError) {
+        console.error('Error updating existing song with new version:', updateError);
+        throw updateError;
+      }
+
+      if (currentUser.role !== 'admin') {
+        const { data: admins } = await supabase.from('users').select('id').eq('role', 'admin');
+        if (admins && admins.length > 0) {
+          for (const admin of admins) {
+            await supabase.from('notifications').insert({
+              user_id: admin.id,
+              message: `New version "${songData.versions.join(', ')}" added to "${existingSong.title}"`,
+              read: false
+            });
+          }
+        }
+      }
+
+      await get().fetchSongs();
+      return;
+    }
+
+    // Brand new song
+    const parsed = parseSongPdfs(songData.pdfUrl, songData.versions);
+    const serializedPdf = serializeSongPdfs(parsed.versionPdfs, parsed.versionKeys, songData.pdfUrl);
+
     if (!isSupabaseConfigured) {
       // Use local state if supabase fails (for prototyping)
       const newSong: Song = {
         ...songData,
         id: Date.now().toString(),
+        pdfUrl: serializedPdf,
+        versionPdfs: parsed.versionPdfs,
+        versionKeys: parsed.versionKeys,
         status: 'pending',
         created_by: currentUser.id,
         approval_count: 0
@@ -211,7 +315,7 @@ export const useStore = create<AppState>((set, get) => ({
       title: songData.title,
       organization: songData.organization,
       category: songData.category,
-      pdf_url: songData.pdfUrl,
+      pdf_url: serializedPdf,
       thumbnail_url: songData.thumbnailUrl,
       lyrics: songData.lyrics,
       versions: songData.versions,
@@ -233,7 +337,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
     await get().fetchSongs();
-    },
+  },
 
   addToRequestQueue: (songId) => {
     const { requestQueue } = get();
@@ -398,19 +502,61 @@ export const useStore = create<AppState>((set, get) => ({
         const brokenIds = ['ffa8ee96-7ab8-4eec-b7ec-0e6e53467865', '6f5eb876-9838-40be-a4e6-eff146f677df'];
         const validSongsData = songsData.filter(s => !brokenIds.includes(s.id));
         
-        const formattedSongs: Song[] = validSongsData.map(s => ({
-          id: s.id,
-          title: s.title || 'Untitled',
-          organization: s.organization || s.author || '',
-          category: s.category || 'Worship',
-          pdfUrl: s.pdf_url || '',
-          thumbnailUrl: s.thumbnail_url || undefined,
-          lyrics: s.lyrics || '',
-          status: s.status as 'pending' | 'approved' || 'pending',
-          keys: s.keys || [],
-          versions: s.versions || [],
-          approval_count: s.approval_count || 0
-        }));
+        // Consolidate songs by title so versions and keys are grouped into one song
+        const songMap = new Map<string, Song>();
+
+        for (const s of validSongsData) {
+          const parsed = parseSongPdfs(s.pdf_url || '', s.versions || []);
+          const normalizedTitle = (s.title || 'Untitled').trim().toLowerCase();
+          
+          if (songMap.has(normalizedTitle)) {
+            const existing = songMap.get(normalizedTitle)!;
+            const mergedVersions = Array.from(new Set([...existing.versions, ...(s.versions || [])]));
+            const mergedKeys = Array.from(new Set([...existing.keys, ...(s.keys || [])]));
+            const mergedVersionPdfs = { ...existing.versionPdfs, ...parsed.versionPdfs };
+            const mergedVersionKeys = { ...existing.versionKeys, ...parsed.versionKeys };
+            
+            if (s.versions && s.versions.length > 0) {
+              s.versions.forEach((v: string) => {
+                if (s.pdf_url && !s.pdf_url.startsWith('{')) {
+                  mergedVersionPdfs[v] = s.pdf_url;
+                }
+                if (s.keys && s.keys.length > 0) {
+                  mergedVersionKeys[v] = s.keys[0];
+                }
+              });
+            }
+
+            songMap.set(normalizedTitle, {
+              ...existing,
+              versions: mergedVersions,
+              keys: mergedKeys,
+              versionPdfs: mergedVersionPdfs,
+              versionKeys: mergedVersionKeys,
+              pdfUrl: serializeSongPdfs(mergedVersionPdfs, mergedVersionKeys, existing.pdfUrl || s.pdf_url),
+              lyrics: existing.lyrics || s.lyrics || '',
+              thumbnailUrl: existing.thumbnailUrl || s.thumbnail_url || undefined
+            });
+          } else {
+            songMap.set(normalizedTitle, {
+              id: s.id,
+              title: s.title || 'Untitled',
+              organization: s.organization || s.author || '',
+              category: s.category || 'Worship',
+              pdfUrl: s.pdf_url || '',
+              versionPdfs: parsed.versionPdfs,
+              versionKeys: parsed.versionKeys,
+              thumbnailUrl: s.thumbnail_url || undefined,
+              lyrics: s.lyrics || '',
+              status: (s.status as 'pending' | 'approved') || 'pending',
+              keys: s.keys || [],
+              versions: s.versions || [],
+              approval_count: s.approval_count || 0
+            });
+          }
+        }
+
+        const formattedSongs: Song[] = Array.from(songMap.values());
         console.log('Formatted songs:', formattedSongs);
         set({ songs: formattedSongs });
       }

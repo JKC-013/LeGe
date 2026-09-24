@@ -44,6 +44,10 @@ export function PublisherDashboard() {
   // Create a unique list of suggestions by title to avoid duplicates
   const uniqueSuggestions = Array.from(new Map(suggestions.map(s => [s.title, s])).values()).slice(0, 5);
 
+  const existingSong = songs.find(
+    s => s.title.trim().toLowerCase() === formData.title.trim().toLowerCase() && formData.title.trim().length > 0
+  );
+
   const selectSuggestion = (song: any) => {
     setFormData({
       ...formData,
@@ -179,6 +183,24 @@ export function PublisherDashboard() {
                       <div className="text-xs text-on-surface-variant">{song.organization} • {song.category === "Worship" ? t("song.worship") : t("song.others")}</div>
                     </div>
                   ))}
+                </div>
+              )}
+              {existingSong && (
+                <div className="mt-3 p-3.5 bg-primary/10 border border-primary/20 rounded-xl text-xs space-y-1.5">
+                  <div className="font-semibold text-primary flex items-center">
+                    <Music className="w-4 h-4 mr-1.5 inline shrink-0" />
+                    <span>{t('publisher.existingSongFound')}</span>
+                  </div>
+                  <div className="text-on-surface-variant flex flex-wrap gap-x-4 gap-y-1">
+                    <span>
+                      <strong className="text-on-surface">{t('publisher.existingVersions')}:</strong>{' '}
+                      {(existingSong.versions || []).join(', ') || 'None'}
+                    </span>
+                    <span>
+                      <strong className="text-on-surface">{t('publisher.existingKeys')}:</strong>{' '}
+                      {(existingSong.keys || []).join(', ') || 'None'}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>

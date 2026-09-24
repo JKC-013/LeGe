@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Search, Music, Star, Mic, Grid, List, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
-import { useStore } from '../store';
+import { useStore, Song } from '../store';
 
 export function SongsCatalog() {
   const { t } = useTranslation();
@@ -15,13 +15,32 @@ export function SongsCatalog() {
   
   const approvedSongs = songs.filter(song => song.status === 'approved');
   
-  const categories = ['All', ...Array.from(new Set(approvedSongs.map(s => s.category)))];
+  // Deduplicate by normalized title so different versions/keys of the same song are grouped under one card
+  const uniqueApprovedSongsMap = new Map<string, Song>();
+  for (const s of approvedSongs) {
+    const key = s.title.trim().toLowerCase();
+    if (!uniqueApprovedSongsMap.has(key)) {
+      uniqueApprovedSongsMap.set(key, s);
+    }
+  }
+  const displaySongs = Array.from(uniqueApprovedSongsMap.values());
 
-  const filteredSongs = approvedSongs.filter(song => 
+  const categories = ['All', ...Array.from(new Set(displaySongs.map(s => s.category)))];
+
+  const filteredSongs = displaySongs.filter(song => 
     (categoryFilter === 'All' || song.category === categoryFilter) &&
     (song.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
      song.organization.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const getSongVersions = (songTitle: string) => {
+    return Array.from(new Set(
+      approvedSongs
+        .filter(s => s.title.trim().toLowerCase() === songTitle.trim().toLowerCase())
+        .flatMap(s => s.versions || [])
+        .filter(Boolean)
+    ));
+  };
 
   const ITEMS_PER_PAGE = 10;
   const totalPages = Math.ceil(filteredSongs.length / ITEMS_PER_PAGE);
@@ -130,6 +149,15 @@ export function SongsCatalog() {
                           {song.category}
                         </span>
                       </div>
+                      {(() => {
+                        const vers = getSongVersions(song.title);
+                        if (vers.length === 0) return null;
+                        return (
+                          <div className="text-[11px] text-primary/80 font-medium truncate pt-0.5">
+                            {vers.map(v => v === 'Mandarin' ? t('song.mandarin') : v === 'Cantonese' ? t('song.cantonese') : v === 'Vietnamese' ? t('song.vietnamese') : v).join(', ')}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </Link>
                 </div>
@@ -145,7 +173,14 @@ export function SongsCatalog() {
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-on-surface hover:text-primary transition-colors">{song.title}</h3>
-                      <p className="text-sm text-on-surface-variant">{song.organization} • {song.category}</p>
+                      <p className="text-sm text-on-surface-variant">
+                        {song.organization} • {song.category}
+                        {(() => {
+                          const vers = getSongVersions(song.title);
+                          if (vers.length === 0) return null;
+                          return ` • ${vers.map(v => v === 'Mandarin' ? t('song.mandarin') : v === 'Cantonese' ? t('song.cantonese') : v === 'Vietnamese' ? t('song.vietnamese') : v).join(', ')}`;
+                        })()}
+                      </p>
                     </div>
                   </Link>
                   

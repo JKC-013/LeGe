@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Star, Music, Mic } from 'lucide-react';
-import { useStore } from '../store';
+import { useStore, Song } from '../store';
 import { isSupabaseConfigured } from '../lib/supabase';
 
 export function Home() {
@@ -11,12 +11,22 @@ export function Home() {
 
   const approvedSongs = songs.filter(song => song.status === 'approved');
   
+  // Deduplicate by normalized title so versions of the same song aren't shown as duplicate cards
+  const uniqueApprovedSongsMap = new Map<string, Song>();
+  for (const s of approvedSongs) {
+    const key = s.title.trim().toLowerCase();
+    if (!uniqueApprovedSongsMap.has(key)) {
+      uniqueApprovedSongsMap.set(key, s);
+    }
+  }
+  const displayApprovedSongs = Array.from(uniqueApprovedSongsMap.values());
+
   // Selected songs: songs that have been approved by pastor
   const approvedRequests = serviceRequests.filter(req => req.status === 'approved');
   const selectedSongIds = new Set(approvedRequests.flatMap(req => req.song_ids));
-  const topSongs = songs.filter(song => selectedSongIds.has(song.id));
+  const topSongs = displayApprovedSongs.filter(song => selectedSongIds.has(song.id));
 
-  const previewSongs = approvedSongs.slice(0, 8);
+  const previewSongs = displayApprovedSongs.slice(0, 8);
 
   return (
     <div className="space-y-20">
@@ -103,9 +113,16 @@ export function Home() {
 
 function SongCard({ song, showApprovalCount = false }: { song: any; showApprovalCount?: boolean; key?: React.Key }) {
   const { t } = useTranslation();
-  const { currentUser, toggleFavourite, addToRequestQueue, removeFromRequestQueue, requestQueue } = useStore();
+  const { songs, currentUser, toggleFavourite, addToRequestQueue, removeFromRequestQueue, requestQueue } = useStore();
   const isFav = currentUser?.favourites.includes(song.id);
   const inQueue = requestQueue.includes(song.id);
+
+  const songVersions = Array.from(new Set(
+    songs
+      .filter(s => s.status === 'approved' && s.title.trim().toLowerCase() === song.title.trim().toLowerCase())
+      .flatMap(s => s.versions || [])
+      .filter(Boolean)
+  ));
 
   return (
     <div className="group block space-y-4 bg-surface-container-lowest p-4 rounded-2xl shadow-ambient hover:shadow-lg transition-all relative border border-outline-variant/10">
@@ -146,6 +163,11 @@ function SongCard({ song, showApprovalCount = false }: { song: any; showApproval
               {song.category}
             </span>
           </div>
+          {songVersions.length > 0 && (
+            <div className="text-[11px] text-primary/80 font-medium truncate pt-0.5">
+              {songVersions.map(v => v === 'Mandarin' ? t('song.mandarin') : v === 'Cantonese' ? t('song.cantonese') : v === 'Vietnamese' ? t('song.vietnamese') : v).join(', ')}
+            </div>
+          )}
           {showApprovalCount && song.approval_count > 0 && (
             <div className="mt-2 text-xs font-medium text-primary">
               {t('home.approvedTimes', { count: song.approval_count })}

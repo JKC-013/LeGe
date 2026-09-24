@@ -56,13 +56,15 @@ export function EditSongModal({ song, isOpen, onClose, onSave }: EditSongModalPr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    const finalVersion = useCustomVersion ? customVersion : formData.version;
+    const finalVersion = useCustomVersion ? customVersion.trim() : formData.version;
+    const mergedVersions = Array.from(new Set([...(song.versions || []), finalVersion]));
+    const mergedKeys = Array.from(new Set([...(song.keys || []), formData.key]));
     await onSave({
       title: formData.title,
       organization: formData.organization,
       category: formData.category,
-      versions: [finalVersion],
-      keys: [formData.key],
+      versions: mergedVersions,
+      keys: mergedKeys,
       lyrics: formData.lyrics
     });
     setIsSaving(false);

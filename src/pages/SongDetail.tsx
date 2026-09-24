@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { ArrowLeft, Star, Mic, Download, Copy, Check, Maximize2, X, ChevronDown, FileQuestion } from 'lucide-react';
 import { PdfViewer } from '../components/PdfViewer';
+import { parseSongPdfs } from '../lib/songHelpers';
 
 export function SongDetail() {
   const { id } = useParams<{ id: string }>();
@@ -16,21 +17,42 @@ export function SongDetail() {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const song = songs.find(s => s.id === id);
+  const parsed = parseSongPdfs(song?.pdfUrl, song?.versions);
 
   useEffect(() => {
     if (song) {
-      if (song.keys && song.keys.length > 0) setSelectedKey(song.keys[0]);
-      if (song.versions && song.versions.length > 0) setSelectedVersion(song.versions[0]);
-      else setSelectedVersion('Vietnamese'); 
+      const initialVersion = (song.versions && song.versions.length > 0) ? song.versions[0] : 'Vietnamese';
+      setSelectedVersion(initialVersion);
+
+      const mappedKey = parsed.versionKeys[initialVersion];
+      if (mappedKey) {
+        setSelectedKey(mappedKey);
+      } else if (song.keys && song.keys.length > 0) {
+        setSelectedKey(song.keys[0]);
+      } else {
+        setSelectedKey('Empty');
+      }
     }
-  }, [song]);
+  }, [song?.id, song?.pdfUrl]);
 
   if (!song) {
     return <div className="text-center py-12 text-outline-variant text-lg">{t('song.notFound')}</div>;
   }
 
+  const handleVersionChange = (newVersion: string) => {
+    setSelectedVersion(newVersion);
+    const mappedKey = parsed.versionKeys[newVersion];
+    if (mappedKey) {
+      setSelectedKey(mappedKey);
+    } else if (song.keys && song.keys.length > 0) {
+      setSelectedKey(song.keys[0]);
+    }
+  };
+
   const isFav = currentUser?.favourites.includes(song.id);
   const isInQueue = useStore(state => state.requestQueue.includes(song.id));
+  const hasVersion = song.versions?.includes(selectedVersion);
+  const activePdfUrl = parsed.versionPdfs[selectedVersion] || (hasVersion ? parsed.defaultPdf : '');
 
   const handleCopy = () => {
     if (song.lyrics) {
@@ -94,15 +116,25 @@ export function SongDetail() {
                 </button>
               </>
             )}
-            <a 
-              href={song.pdfUrl}
-              download
-              target="_blank"
-              rel="noreferrer"
-              className="p-3 rounded-full bg-primary text-on-primary hover:bg-primary-container transition-colors shadow-ambient"
-            >
-              <Download className="w-5 h-5" />
-            </a>
+            {activePdfUrl ? (
+              <a 
+                href={activePdfUrl}
+                download
+                target="_blank"
+                rel="noreferrer"
+                className="p-3 rounded-full bg-primary text-on-primary hover:bg-primary-container transition-colors shadow-ambient"
+              >
+                <Download className="w-5 h-5" />
+              </a>
+            ) : (
+              <button 
+                disabled
+                className="p-3 rounded-full bg-surface-container text-on-surface-variant/40 cursor-not-allowed"
+                title={t('song.empty')}
+              >
+                <Download className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -113,21 +145,15 @@ export function SongDetail() {
             <div className="relative">
               <select 
                 value={selectedVersion}
-                onChange={(e) => setSelectedVersion(e.target.value)}
+                onChange={(e) => handleVersionChange(e.target.value)}
                 className="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg pl-4 pr-10 py-2 focus:outline-none focus:border-primary appearance-none cursor-pointer hover:bg-surface-container-highest transition-colors"
               >
-                {(!song.versions || song.versions.length === 0) ? (
-                  <option value="Empty">{t('song.empty')}</option>
-                ) : (
-                  <>
-                    <option value="Mandarin">{t('song.mandarin')}</option>
-                    <option value="Cantonese">{t('song.cantonese')}</option>
-                    <option value="Vietnamese">{t('song.vietnamese')}</option>
-                    {song.versions.filter(v => !['Mandarin', 'Cantonese', 'Vietnamese'].includes(v)).map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </>
-                )}
+                <option value="Mandarin">{t('song.mandarin')}</option>
+                <option value="Cantonese">{t('song.cantonese')}</option>
+                <option value="Vietnamese">{t('song.vietnamese')}</option>
+                {song.versions?.filter(v => !['Mandarin', 'Cantonese', 'Vietnamese'].includes(v)).map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant pointer-events-none" />
             </div>
@@ -137,11 +163,12 @@ export function SongDetail() {
             <label className="block text-sm font-medium text-on-surface-variant mb-1">{t('song.key')}</label>
             <div className="relative">
               <select 
-                value={(!song.keys || song.keys.length === 0 || !song.versions?.includes(selectedVersion)) ? "Empty" : selectedKey}
+                value={(!song.keys || song.keys.length === 0 || !hasVersion) ? "Empty" : selectedKey}
                 onChange={(e) => setSelectedKey(e.target.value)}
-                className="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg pl-4 pr-10 py-2 focus:outline-none focus:border-primary appearance-none cursor-pointer hover:bg-surface-container-highest transition-colors"
+                disabled={!hasVersion || !song.keys || song.keys.length === 0}
+                className="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg pl-4 pr-10 py-2 focus:outline-none focus:border-primary appearance-none cursor-pointer hover:bg-surface-container-highest transition-colors disabled:opacity-50"
               >
-                {(!song.keys || song.keys.length === 0 || !song.versions?.includes(selectedVersion)) ? (
+                {(!song.keys || song.keys.length === 0 || !hasVersion) ? (
                   <option value="Empty">{t('song.empty')}</option>
                 ) : (
                   song.keys.map(k => <option key={k} value={k}>{k}</option>)
@@ -162,8 +189,8 @@ export function SongDetail() {
               {isFullscreen ? <X className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
             </button>
           </div>
-          {(song.pdfUrl && song.versions?.includes(selectedVersion)) ? (
-            <PdfViewer url={song.pdfUrl} />
+          {activePdfUrl ? (
+            <PdfViewer url={activePdfUrl} />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-on-surface-variant bg-surface">
               <FileQuestion className="w-16 h-16 mb-4 text-outline-variant opacity-50" />
