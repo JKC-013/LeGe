@@ -64,6 +64,8 @@ interface AppState {
   approveSong: (songId: string) => Promise<void>;
   declineSong: (songId: string) => Promise<void>;
   deleteSong: (songId: string) => Promise<void>;
+  deleteSongVersion: (songId: string, versionToDelete: string) => Promise<void>;
+  deleteSongKey: (songId: string, version: string, keyToDelete?: string) => Promise<void>;
   editSong: (songId: string, updates: Partial<Song>) => Promise<void>;
   addToRequestQueue: (songId: string) => void;
   removeFromRequestQueue: (songId: string) => void;
@@ -248,7 +250,8 @@ export const useStore = create<AppState>((set, get) => ({
             lyrics: songData.lyrics || s.lyrics,
             thumbnailUrl: songData.thumbnailUrl || s.thumbnailUrl,
             organization: songData.organization || s.organization,
-            category: songData.category || s.category
+            category: songData.category || s.category,
+            status: 'pending'
           } : s)
         });
         return;
@@ -259,7 +262,8 @@ export const useStore = create<AppState>((set, get) => ({
         keys: mergedKeys,
         pdf_url: serializedPdf,
         organization: songData.organization || existingSong.organization,
-        category: songData.category || existingSong.category
+        category: songData.category || existingSong.category,
+        status: 'pending'
       };
       if (songData.lyrics) updatePayload.lyrics = songData.lyrics;
       if (songData.thumbnailUrl) updatePayload.thumbnail_url = songData.thumbnailUrl;
@@ -425,33 +429,149 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
   deleteSong: async (songId) => {
-    if (!isSupabaseConfigured) return;
+    const { songs } = get();
+    const song = songs.find(s => s.id === songId);
     
-    await supabase
-      .from('songs')
-      .delete()
-      .eq('id', songId);
-      
-    get().fetchSongs();
+    if (isSupabaseConfigured) {
+      if (song) {
+        await supabase
+          .from('songs')
+          .delete()
+          .eq('title', song.title);
+      }
+      await supabase
+        .from('songs')
+        .delete()
+        .eq('id', songId);
+    }
+    
+    set(state => ({
+      songs: state.songs.filter(s => s.id !== songId && (!song || s.title !== song.title))
+    }));
+    await get().fetchSongs();
+  },
+
+  deleteSongVersion: async (songId, versionToDelete) => {
+    const { songs, editSong, deleteSong } = get();
+    const song = songs.find(s => s.id === songId);
+    if (!song) return;
+
+    const remainingVersions = (song.versions || []).filter(v => v !== versionToDelete);
+    if (remainingVersions.length === 0) {
+      await deleteSong(songId);
+      return;
+    }
+
+    const currentParsed = parseSongPdfs(song.pdfUrl, song.versions);
+    const newVersionPdfs = { ...currentParsed.versionPdfs };
+    delete newVersionPdfs[versionToDelete];
+    const newVersionKeys = { ...currentParsed.versionKeys };
+    delete newVersionKeys[versionToDelete];
+
+    const keysInUse = Array.from(new Set(Object.values(newVersionKeys)));
+    const remainingKeys = (song.keys || []).filter(k => keysInUse.includes(k) || keysInUse.length === 0);
+
+    const serializedPdf = serializeSongPdfs(newVersionPdfs, newVersionKeys, currentParsed.defaultPdf);
+
+    await editSong(songId, {
+      versions: remainingVersions,
+      keys: remainingKeys.length > 0 ? remainingKeys : song.keys,
+      pdfUrl: serializedPdf,
+      versionPdfs: newVersionPdfs,
+      versionKeys: newVersionKeys
+    });
+  },
+
+  deleteSongKey: async (songId, version, keyToDelete) => {
+    const { songs, editSong } = get();
+    const song = songs.find(s => s.id === songId);
+    if (!song) return;
+
+    const currentParsed = parseSongPdfs(song.pdfUrl, song.versions);
+    const newVersionKeys = { ...currentParsed.versionKeys };
+
+    let newKeys = [...(song.keys || [])];
+
+    if (keyToDelete) {
+      if (newVersionKeys[version] === keyToDelete) {
+        delete newVersionKeys[version];
+      }
+      const isUsedElsewhere = Object.entries(newVersionKeys).some(([v, k]) => v !== version && k === keyToDelete);
+      if (!isUsedElsewhere) {
+        newKeys = newKeys.filter(k => k !== keyToDelete);
+      }
+    } else {
+      delete newVersionKeys[version];
+      const keysStillUsed = Object.values(newVersionKeys);
+      newKeys = newKeys.filter(k => keysStillUsed.includes(k));
+    }
+
+    const serializedPdf = serializeSongPdfs(currentParsed.versionPdfs, newVersionKeys, currentParsed.defaultPdf);
+
+    await editSong(songId, {
+      keys: newKeys,
+      pdfUrl: serializedPdf,
+      versionKeys: newVersionKeys
+    });
   },
 
   editSong: async (songId, updates) => {
+    const { songs } = get();
+    const song = songs.find(s => s.id === songId);
+
+    let finalPdfUrl = updates.pdfUrl;
+    if (updates.versionPdfs || updates.versionKeys) {
+      const vPdfs = updates.versionPdfs || song?.versionPdfs || {};
+      const vKeys = updates.versionKeys || song?.versionKeys || {};
+      finalPdfUrl = serializeSongPdfs(vPdfs, vKeys, updates.pdfUrl || song?.pdfUrl || '');
+    }
+
     if (!isSupabaseConfigured) {
-      // Mock update
       set(state => ({
-        songs: state.songs.map(s => s.id === songId ? { ...s, ...updates } : s)
+        songs: state.songs.map(s => s.id === songId ? {
+          ...s,
+          ...updates,
+          pdfUrl: finalPdfUrl || s.pdfUrl,
+          versionPdfs: updates.versionPdfs || s.versionPdfs,
+          versionKeys: updates.versionKeys || s.versionKeys
+        } : s)
       }));
       return;
     }
     
-    // Pass updates directly to Supabase
-    const supabaseUpdates: any = { ...updates };
-    
+    const supabaseUpdates: any = {};
+    if (updates.title !== undefined) supabaseUpdates.title = updates.title;
+    if (updates.organization !== undefined) supabaseUpdates.organization = updates.organization;
+    if (updates.category !== undefined) supabaseUpdates.category = updates.category;
+    if (updates.lyrics !== undefined) supabaseUpdates.lyrics = updates.lyrics;
+    if (updates.versions !== undefined) supabaseUpdates.versions = updates.versions;
+    if (updates.keys !== undefined) supabaseUpdates.keys = updates.keys;
+    if (finalPdfUrl !== undefined) supabaseUpdates.pdf_url = finalPdfUrl;
+    if (updates.thumbnailUrl !== undefined) supabaseUpdates.thumbnail_url = updates.thumbnailUrl;
+    // Note: status is intentionally untouched here - editing never sends to approve tab again
+
+    if (song) {
+      await supabase
+        .from('songs')
+        .update(supabaseUpdates)
+        .eq('title', song.title);
+    }
     await supabase
       .from('songs')
       .update(supabaseUpdates)
       .eq('id', songId);
-    get().fetchSongs();
+
+    set(state => ({
+      songs: state.songs.map(s => s.id === songId || (song && s.title === song.title) ? {
+        ...s,
+        ...updates,
+        pdfUrl: finalPdfUrl || s.pdfUrl,
+        versionPdfs: updates.versionPdfs || s.versionPdfs,
+        versionKeys: updates.versionKeys || s.versionKeys
+      } : s)
+    }));
+
+    await get().fetchSongs();
   },
 
   
@@ -527,8 +647,10 @@ export const useStore = create<AppState>((set, get) => ({
               });
             }
 
+            const isPending = existing.status === 'pending' || s.status === 'pending';
             songMap.set(normalizedTitle, {
               ...existing,
+              status: isPending ? 'pending' : 'approved',
               versions: mergedVersions,
               keys: mergedKeys,
               versionPdfs: mergedVersionPdfs,

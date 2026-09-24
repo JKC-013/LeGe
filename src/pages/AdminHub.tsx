@@ -12,6 +12,7 @@ export function AdminHub() {
   const [searchQuery, setSearchQuery] = useState('');
   
   const [editingSong, setEditingSong] = useState<Song | null>(null);
+  const [songSearchQuery, setSongSearchQuery] = useState('');
 
   const safeQuery = (searchQuery || '').trim().toLowerCase();
   const filteredUsers = users.filter(u => {
@@ -21,6 +22,12 @@ export function AdminHub() {
   });
   const pendingSongs = songs.filter(s => s.status === 'pending');
   const approvedSongs = songs.filter(s => s.status === 'approved');
+
+  const safeSongQuery = (songSearchQuery || '').trim().toLowerCase();
+  const filteredApprovedSongs = approvedSongs.filter(s => {
+    if (!safeSongQuery) return true;
+    return s.title.toLowerCase().includes(safeSongQuery) || (s.organization && s.organization.toLowerCase().includes(safeSongQuery));
+  });
 
   const handleSaveEdit = async (updates: Partial<Song>) => {
     if (editingSong) {
@@ -151,11 +158,7 @@ export function AdminHub() {
                   <div key={song.id} className="flex items-center justify-between p-4 border border-outline-variant/15 rounded-xl bg-surface">
                     <div>
                       <h4 className="text-lg font-bold text-on-surface">{song.title}</h4>
-                      <p className="text-sm text-on-surface-variant">
-                        {song.organization} &bull; {song.category}
-                        {song.versions && song.versions.length > 0 && ` • Version: ${song.versions.join(', ')}`}
-                        {song.keys && song.keys.length > 0 && ` • Key: ${song.keys.join(', ')}`}
-                      </p>
+                      <p className="text-sm text-on-surface-variant">{song.organization} &bull; {song.category}</p>
                     </div>
                     <div className="flex space-x-2">
                       <button onClick={() => setEditingSong(song)} className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors" title={t('admin.edit')}>
@@ -176,29 +179,71 @@ export function AdminHub() {
         )}
 
         {activeTab === 'score' && (
-          <div className="p-6">
-            <div className="space-y-4">
-              {approvedSongs.map(song => (
-                <div key={song.id} className="flex items-center justify-between p-4 border border-outline-variant/15 rounded-xl bg-surface">
-                  <div>
-                    <h4 className="text-lg font-bold text-on-surface">{song.title}</h4>
-                    <p className="text-sm text-on-surface-variant">
-                      {song.organization} &bull; {song.category}
-                      {song.versions && song.versions.length > 0 && ` • Version: ${song.versions.join(', ')}`}
-                      {song.keys && song.keys.length > 0 && ` • Key: ${song.keys.join(', ')}`}
-                    </p>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button onClick={() => setEditingSong(song)} className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors" title={t('admin.edit')}>
-                      <Edit className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => deleteSong(song.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors" title={t('admin.delete')}>
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+          <div className="p-6 space-y-6">
+            <div className="relative">
+              <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant" />
+              <input
+                type="text"
+                value={songSearchQuery}
+                onChange={e => setSongSearchQuery(e.target.value)}
+                placeholder={t('admin.searchSongPlaceholder')}
+                className="w-full bg-surface pl-11 pr-4 py-3 rounded-xl border border-outline-variant/20 focus:border-primary focus:outline-none text-sm text-on-surface"
+              />
             </div>
+
+            {filteredApprovedSongs.length === 0 ? (
+              <div className="text-center py-12 text-outline-variant text-base">
+                {t('home.empty')}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredApprovedSongs.map(song => (
+                  <div key={song.id} className="p-4 sm:p-5 border border-outline-variant/15 rounded-2xl bg-surface flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-lg font-bold text-on-surface">{song.title}</h4>
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-surface-container font-normal text-on-surface-variant">
+                          {song.category}
+                        </span>
+                      </div>
+                      <p className="text-xs text-on-surface-variant">
+                        {song.organization}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {song.versions?.map(v => (
+                          <span key={v} className="text-[11px] px-2 py-0.5 bg-surface-container rounded-md font-medium text-on-surface-variant">
+                            v: {v}
+                          </span>
+                        ))}
+                        {song.keys?.map(k => (
+                          <span key={k} className="text-[11px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-md font-mono font-medium">
+                            Key: {k}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2 shrink-0 self-end sm:self-center">
+                      <button 
+                        onClick={() => setEditingSong(song)} 
+                        className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition-colors flex items-center shadow-sm"
+                        title={t('admin.edit')}
+                      >
+                        <Edit className="w-4 h-4 mr-1.5" />
+                        <span>{t('admin.edit')}</span>
+                      </button>
+                      <button 
+                        onClick={() => deleteSong(song.id)} 
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors" 
+                        title={t('admin.delete')}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
