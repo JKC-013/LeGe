@@ -19,21 +19,96 @@ export function SongDetail() {
   const song = songs.find(s => s.id === id);
   const parsed = parseSongPdfs(song?.pdfUrl, song?.versions);
 
+  // 1. Calculate versions that actually have sheet music (including Vietnamese, Mandarin, Cantonese only if they have sheets)
+  const versionsWithSheets = React.useMemo(() => {
+    if (!song) return [];
+    const validFromPdfs = Object.entries(parsed.versionPdfs)
+      .filter(([_, url]) => typeof url === 'string' && url.trim().length > 0)
+      .map(([version]) => version);
+
+    if (validFromPdfs.length > 0) {
+      const ordered: string[] = [];
+      (song.versions || []).forEach(v => {
+        if (validFromPdfs.includes(v) && !ordered.includes(v)) {
+          ordered.push(v);
+        }
+      });
+      validFromPdfs.forEach(v => {
+        if (!ordered.includes(v)) {
+          ordered.push(v);
+        }
+      });
+      return ordered;
+    }
+
+    if (parsed.defaultPdf && parsed.defaultPdf.trim().length > 0) {
+      const fallbackVersion = (song.versions && song.versions.length > 0) ? song.versions[0] : 'Vietnamese';
+      return [fallbackVersion];
+    }
+
+    return [];
+  }, [song, parsed]);
+
+  // 2. Calculate keys that actually have sheet music for the selected version
+  const keysWithSheets = React.useMemo(() => {
+    if (!song || !selectedVersion || selectedVersion === 'Empty' || !versionsWithSheets.includes(selectedVersion)) {
+      return [];
+    }
+
+    const directKey = parsed.versionKeys[selectedVersion]?.trim();
+    if (directKey) {
+      return directKey.includes(',')
+        ? directKey.split(',').map(k => k.trim()).filter(Boolean)
+        : [directKey];
+    }
+
+    const keysAssignedToOthers = Object.entries(parsed.versionKeys)
+      .filter(([v, k]) => v !== selectedVersion && Boolean(k?.trim()))
+      .map(([_, k]) => k.trim());
+
+    const available = (song.keys || []).filter(k => Boolean(k?.trim()) && !keysAssignedToOthers.includes(k.trim()));
+    if (available.length > 0) {
+      return available;
+    }
+
+    if (song.keys && song.keys.length > 0) {
+      return song.keys.filter(k => Boolean(k?.trim()));
+    }
+
+    return [];
+  }, [song, selectedVersion, parsed, versionsWithSheets]);
+
   useEffect(() => {
     if (song) {
-      const initialVersion = (song.versions && song.versions.length > 0) ? song.versions[0] : 'Vietnamese';
-      setSelectedVersion(initialVersion);
+      if (versionsWithSheets.length > 0) {
+        const nextVersion = versionsWithSheets.includes(selectedVersion)
+          ? selectedVersion
+          : versionsWithSheets[0];
+        setSelectedVersion(nextVersion);
 
-      const mappedKey = parsed.versionKeys[initialVersion];
-      if (mappedKey) {
-        setSelectedKey(mappedKey);
-      } else if (song.keys && song.keys.length > 0) {
-        setSelectedKey(song.keys[0]);
+        const directKey = parsed.versionKeys[nextVersion]?.trim();
+        if (directKey) {
+          const keys = directKey.includes(',') ? directKey.split(',').map(k => k.trim()).filter(Boolean) : [directKey];
+          setSelectedKey(keys[0] || 'Empty');
+        } else {
+          const keysAssignedToOthers = Object.entries(parsed.versionKeys)
+            .filter(([v, k]) => v !== nextVersion && Boolean(k?.trim()))
+            .map(([_, k]) => k.trim());
+          const available = (song.keys || []).filter(k => Boolean(k?.trim()) && !keysAssignedToOthers.includes(k.trim()));
+          if (available.length > 0) {
+            setSelectedKey(available[0]);
+          } else if (song.keys && song.keys.length > 0) {
+            setSelectedKey(song.keys[0]);
+          } else {
+            setSelectedKey('Empty');
+          }
+        }
       } else {
+        setSelectedVersion('Empty');
         setSelectedKey('Empty');
       }
     }
-  }, [song?.id, song?.pdfUrl]);
+  }, [song?.id, song?.pdfUrl, versionsWithSheets.join(',')]);
 
   if (!song) {
     return <div className="text-center py-12 text-outline-variant text-lg">{t('song.notFound')}</div>;
@@ -41,18 +116,31 @@ export function SongDetail() {
 
   const handleVersionChange = (newVersion: string) => {
     setSelectedVersion(newVersion);
-    const mappedKey = parsed.versionKeys[newVersion];
-    if (mappedKey) {
-      setSelectedKey(mappedKey);
-    } else if (song.keys && song.keys.length > 0) {
-      setSelectedKey(song.keys[0]);
+    const directKey = parsed.versionKeys[newVersion]?.trim();
+    if (directKey) {
+      const keys = directKey.includes(',') ? directKey.split(',').map(k => k.trim()).filter(Boolean) : [directKey];
+      setSelectedKey(keys[0] || 'Empty');
+    } else {
+      const keysAssignedToOthers = Object.entries(parsed.versionKeys)
+        .filter(([v, k]) => v !== newVersion && Boolean(k?.trim()))
+        .map(([_, k]) => k.trim());
+      const available = (song.keys || []).filter(k => Boolean(k?.trim()) && !keysAssignedToOthers.includes(k.trim()));
+      if (available.length > 0) {
+        setSelectedKey(available[0]);
+      } else if (song.keys && song.keys.length > 0) {
+        setSelectedKey(song.keys[0]);
+      } else {
+        setSelectedKey('Empty');
+      }
     }
   };
 
   const isFav = currentUser?.favourites.includes(song.id);
   const isInQueue = useStore(state => state.requestQueue.includes(song.id));
-  const hasVersion = song.versions?.includes(selectedVersion);
-  const activePdfUrl = parsed.versionPdfs[selectedVersion] || (hasVersion ? parsed.defaultPdf : '');
+  const hasVersion = versionsWithSheets.includes(selectedVersion);
+  const activePdfUrl = hasVersion
+    ? (parsed.versionPdfs[selectedVersion] || (versionsWithSheets.length === 1 ? parsed.defaultPdf : ''))
+    : '';
 
   const handleCopy = () => {
     if (song.lyrics) {
@@ -144,16 +232,22 @@ export function SongDetail() {
             <label className="block text-sm font-medium text-on-surface-variant mb-1">{t('song.version')}</label>
             <div className="relative">
               <select 
-                value={selectedVersion}
+                value={versionsWithSheets.length === 0 ? "Empty" : selectedVersion}
                 onChange={(e) => handleVersionChange(e.target.value)}
-                className="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg pl-4 pr-10 py-2 focus:outline-none focus:border-primary appearance-none cursor-pointer hover:bg-surface-container-highest transition-colors"
+                disabled={versionsWithSheets.length === 0}
+                className="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg pl-4 pr-10 py-2 focus:outline-none focus:border-primary appearance-none cursor-pointer hover:bg-surface-container-highest transition-colors disabled:opacity-50"
               >
-                <option value="Mandarin">{t('song.mandarin')}</option>
-                <option value="Cantonese">{t('song.cantonese')}</option>
-                <option value="Vietnamese">{t('song.vietnamese')}</option>
-                {song.versions?.filter(v => !['Mandarin', 'Cantonese', 'Vietnamese'].includes(v)).map(v => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
+                {versionsWithSheets.length === 0 ? (
+                  <option value="Empty">{t('song.empty')}</option>
+                ) : (
+                  versionsWithSheets.map(v => (
+                    <option key={v} value={v}>
+                      {['Mandarin', 'Cantonese', 'Vietnamese'].includes(v)
+                        ? t(`song.${v.toLowerCase()}` as any, { defaultValue: v })
+                        : v}
+                    </option>
+                  ))
+                )}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant pointer-events-none" />
             </div>
@@ -163,15 +257,15 @@ export function SongDetail() {
             <label className="block text-sm font-medium text-on-surface-variant mb-1">{t('song.key')}</label>
             <div className="relative">
               <select 
-                value={(!song.keys || song.keys.length === 0 || !hasVersion) ? "Empty" : selectedKey}
+                value={keysWithSheets.length === 0 ? "Empty" : selectedKey}
                 onChange={(e) => setSelectedKey(e.target.value)}
-                disabled={!hasVersion || !song.keys || song.keys.length === 0}
+                disabled={keysWithSheets.length === 0}
                 className="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg pl-4 pr-10 py-2 focus:outline-none focus:border-primary appearance-none cursor-pointer hover:bg-surface-container-highest transition-colors disabled:opacity-50"
               >
-                {(!song.keys || song.keys.length === 0 || !hasVersion) ? (
+                {keysWithSheets.length === 0 ? (
                   <option value="Empty">{t('song.empty')}</option>
                 ) : (
-                  song.keys.map(k => <option key={k} value={k}>{k}</option>)
+                  keysWithSheets.map(k => <option key={k} value={k}>{k}</option>)
                 )}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant pointer-events-none" />

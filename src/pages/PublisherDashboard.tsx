@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { CheckCircle2, Upload, Loader2, Music, ChevronDown, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { generatePdfThumbnail } from '../lib/pdfThumbnail';
+import { parseSongPdfs } from '../lib/songHelpers';
 
 const PREDEFINED_VERSIONS = ['Mandarin', 'Cantonese', 'Vietnamese'];
 const PREDEFINED_KEYS = ['Dd', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A', 'E', 'B', 'F#-Gb'];
@@ -44,18 +45,97 @@ export function PublisherDashboard() {
   // Create a unique list of suggestions by title to avoid duplicates
   const uniqueSuggestions = Array.from(new Map(suggestions.map(s => [s.title, s])).values()).slice(0, 5);
 
-  const existingSong = songs.find(
+  const matchingSongs = songs.filter(
     s => s.title.trim().toLowerCase() === formData.title.trim().toLowerCase() && formData.title.trim().length > 0
   );
 
+  const existingSong = matchingSongs.find(s => s.status === 'approved') || matchingSongs[0] || null;
+
+  // Collect versions that already have music sheets for this song title
+  const existingVersionsWithSheets = React.useMemo(() => {
+    if (matchingSongs.length === 0) return [];
+    const versions = new Set<string>();
+    matchingSongs.forEach(s => {
+      const parsed = parseSongPdfs(s.pdfUrl, s.versions);
+      Object.entries(parsed.versionPdfs).forEach(([v, url]) => {
+        if (url && url.trim().length > 0) {
+          versions.add(v);
+        }
+      });
+      if (parsed.defaultPdf && parsed.defaultPdf.trim().length > 0) {
+        if (Object.keys(parsed.versionPdfs).length === 0 && s.versions && s.versions.length > 0) {
+          versions.add(s.versions[0]);
+        }
+      }
+    });
+    return Array.from(versions);
+  }, [matchingSongs]);
+
+  // Collect keys that already have music sheets for this song title
+  const existingKeysWithSheets = React.useMemo(() => {
+    if (matchingSongs.length === 0) return [];
+    const keys = new Set<string>();
+    matchingSongs.forEach(s => {
+      const parsed = parseSongPdfs(s.pdfUrl, s.versions);
+      Object.entries(parsed.versionKeys).forEach(([v, k]) => {
+        const hasSheet = Boolean(parsed.versionPdfs[v]?.trim() || (Object.keys(parsed.versionPdfs).length === 0 && parsed.defaultPdf?.trim()));
+        if (hasSheet && k && k.trim().length > 0) {
+          keys.add(k.trim());
+        }
+      });
+      if (s.pdfUrl && s.pdfUrl.trim().length > 0 && s.keys) {
+        s.keys.forEach(k => {
+          if (k && k.trim().length > 0) {
+            keys.add(k.trim());
+          }
+        });
+      }
+    });
+    return Array.from(keys);
+  }, [matchingSongs]);
+
+  // Available versions that haven't has music sheets:
+  const availableVersions = React.useMemo(() => {
+    return PREDEFINED_VERSIONS.filter(v => !existingVersionsWithSheets.includes(v));
+  }, [existingVersionsWithSheets]);
+
+  // Available keys that haven't has music sheets:
+  const availableKeys = React.useMemo(() => {
+    return PREDEFINED_KEYS.filter(k => !existingKeysWithSheets.includes(k));
+  }, [existingKeysWithSheets]);
+
+  // Synchronize formData version and key when available options change
+  React.useEffect(() => {
+    if (!useCustomVersion) {
+      if (availableVersions.length > 0) {
+        if (!availableVersions.includes(formData.version)) {
+          setFormData(prev => ({ ...prev, version: availableVersions[0] }));
+        }
+      } else if (matchingSongs.length > 0) {
+        setUseCustomVersion(true);
+      }
+    }
+  }, [availableVersions, useCustomVersion, matchingSongs.length]);
+
+  React.useEffect(() => {
+    if (availableKeys.length > 0) {
+      if (!availableKeys.includes(formData.key)) {
+        setFormData(prev => ({ ...prev, key: availableKeys[0] }));
+      }
+    }
+  }, [availableKeys]);
+
+  const isCustomVersionDuplicate = useCustomVersion && customVersion.trim().length > 0 &&
+    existingVersionsWithSheets.map(v => v.toLowerCase()).includes(customVersion.trim().toLowerCase());
+
   const selectSuggestion = (song: any) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       title: song.title,
       organization: song.organization || '',
       category: song.category || 'Worship',
       lyrics: song.lyrics || ''
-    });
+    }));
     setShowSuggestions(false);
   };
 
@@ -63,6 +143,16 @@ export function PublisherDashboard() {
     e.preventDefault();
     if (!pdfFile) {
       alert('Please select a PDF file.');
+      return;
+    }
+
+    if (isCustomVersionDuplicate) {
+      alert(t('publisher.versionAlreadyExists'));
+      return;
+    }
+
+    if (matchingSongs.length > 0 && availableKeys.length === 0) {
+      alert(t('publisher.allKeysExist'));
       return;
     }
 
@@ -194,11 +284,11 @@ export function PublisherDashboard() {
                   <div className="text-on-surface-variant flex flex-wrap gap-x-4 gap-y-1">
                     <span>
                       <strong className="text-on-surface">{t('publisher.existingVersions')}:</strong>{' '}
-                      {(existingSong.versions || []).join(', ') || 'None'}
+                      {existingVersionsWithSheets.join(', ') || 'None'}
                     </span>
                     <span>
                       <strong className="text-on-surface">{t('publisher.existingKeys')}:</strong>{' '}
-                      {(existingSong.keys || []).join(', ') || 'None'}
+                      {existingKeysWithSheets.join(', ') || 'None'}
                     </span>
                   </div>
                 </div>
@@ -223,20 +313,49 @@ export function PublisherDashboard() {
 
             <div>
               <label className="block text-sm font-bold text-on-surface mb-2">{t('publisher.version')}</label>
-              {!useCustomVersion ? (
+              {!useCustomVersion && availableVersions.length > 0 ? (
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <select className="block w-full bg-surface-container-highest border-b-2 border-transparent focus:border-primary rounded-t-xl rounded-b-sm py-3 pl-4 pr-10 focus:outline-none focus:ring-0 text-base transition-colors text-on-surface appearance-none cursor-pointer" value={formData.version} onChange={e => setFormData({...formData, version: e.target.value})}>
-                      {PREDEFINED_VERSIONS.map(v => <option key={v} value={v}>{t(`song.${v.toLowerCase()}` as any, { defaultValue: v })}</option>)}
+                    <select 
+                      className="block w-full bg-surface-container-highest border-b-2 border-transparent focus:border-primary rounded-t-xl rounded-b-sm py-3 pl-4 pr-10 focus:outline-none focus:ring-0 text-base transition-colors text-on-surface appearance-none cursor-pointer" 
+                      value={formData.version} 
+                      onChange={e => setFormData({...formData, version: e.target.value})}
+                    >
+                      {availableVersions.map(v => (
+                        <option key={v} value={v}>
+                          {t(`song.${v.toLowerCase()}` as any, { defaultValue: v })}
+                        </option>
+                      ))}
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant pointer-events-none" />
                   </div>
                   <button type="button" onClick={() => setUseCustomVersion(true)} className="px-4 py-2 bg-surface-container rounded-lg text-sm font-medium hover:bg-surface-container-high">{t('publisher.custom')}</button>
                 </div>
               ) : (
-                <div className="flex gap-2">
-                  <input required type="text" placeholder={t('publisher.custom')} className="block flex-1 bg-surface-container-highest border-b-2 border-transparent focus:border-primary rounded-t-xl rounded-b-sm py-3 px-4 focus:outline-none focus:ring-0 text-base transition-colors text-on-surface" value={customVersion} onChange={e => setCustomVersion(e.target.value)} />
-                  <button type="button" onClick={() => setUseCustomVersion(false)} className="px-4 py-2 bg-surface-container rounded-lg text-sm font-medium hover:bg-surface-container-high">{t('publisher.cancel')}</button>
+                <div className="space-y-1.5">
+                  <div className="flex gap-2">
+                    <input 
+                      required 
+                      type="text" 
+                      placeholder={t('publisher.custom')} 
+                      className={`block flex-1 bg-surface-container-highest border-b-2 ${isCustomVersionDuplicate ? 'border-red-500' : 'border-transparent focus:border-primary'} rounded-t-xl rounded-b-sm py-3 px-4 focus:outline-none focus:ring-0 text-base transition-colors text-on-surface`}
+                      value={customVersion} 
+                      onChange={e => setCustomVersion(e.target.value)} 
+                    />
+                    {availableVersions.length > 0 && (
+                      <button type="button" onClick={() => setUseCustomVersion(false)} className="px-4 py-2 bg-surface-container rounded-lg text-sm font-medium hover:bg-surface-container-high">{t('publisher.cancel')}</button>
+                    )}
+                  </div>
+                  {isCustomVersionDuplicate && (
+                    <p className="text-xs text-red-500 font-medium">
+                      {t('publisher.versionAlreadyExists')}
+                    </p>
+                  )}
+                  {availableVersions.length === 0 && matchingSongs.length > 0 && (
+                    <p className="text-xs text-on-surface-variant">
+                      {t('publisher.allDefaultVersionsExist')}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -244,11 +363,25 @@ export function PublisherDashboard() {
             <div>
               <label className="block text-sm font-bold text-on-surface mb-2">{t('publisher.key')}</label>
               <div className="relative">
-                <select className="block w-full bg-surface-container-highest border-b-2 border-transparent focus:border-primary rounded-t-xl rounded-b-sm py-3 pl-4 pr-10 focus:outline-none focus:ring-0 text-base transition-colors text-on-surface appearance-none cursor-pointer" value={formData.key} onChange={e => setFormData({...formData, key: e.target.value})}>
-                  {PREDEFINED_KEYS.map(k => <option key={k} value={k}>{k}</option>)}
+                <select 
+                  className="block w-full bg-surface-container-highest border-b-2 border-transparent focus:border-primary rounded-t-xl rounded-b-sm py-3 pl-4 pr-10 focus:outline-none focus:ring-0 text-base transition-colors text-on-surface appearance-none cursor-pointer disabled:opacity-50" 
+                  value={availableKeys.length === 0 ? "Empty" : formData.key} 
+                  disabled={availableKeys.length === 0}
+                  onChange={e => setFormData({...formData, key: e.target.value})}
+                >
+                  {availableKeys.length === 0 ? (
+                    <option value="Empty">{t('song.empty')}</option>
+                  ) : (
+                    availableKeys.map(k => <option key={k} value={k}>{k}</option>)
+                  )}
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant pointer-events-none" />
               </div>
+              {availableKeys.length === 0 && matchingSongs.length > 0 && (
+                <p className="text-xs text-red-500 mt-1 font-medium">
+                  {t('publisher.allKeysExist')}
+                </p>
+              )}
             </div>
 
             <div className="sm:col-span-2">
@@ -260,7 +393,7 @@ export function PublisherDashboard() {
           <div className="pt-4">
             <button 
               type="submit" 
-              disabled={isUploading || !pdfFile}
+              disabled={isUploading || !pdfFile || isCustomVersionDuplicate || (matchingSongs.length > 0 && availableKeys.length === 0)}
               className="w-full flex justify-center items-center py-4 px-4 border border-transparent rounded-full shadow-ambient text-base font-bold text-on-primary bg-primary hover:bg-primary-container focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isUploading ? (
